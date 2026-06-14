@@ -1,0 +1,14 @@
+node_modules/
+__pycache__/
+*.pyc
+.env
+.env.local
+*.egg-info/
+dist/
+build/
+.vscode/
+.idea/
+*.log
+.DS_Store
+coverage/
+.nyc_output/

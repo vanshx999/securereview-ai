@@ -1,0 +1,213 @@
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.database import get_db
+from app.models import User, Organization, AuditLog
+from app.schemas import (
+    UserCreate, UserLogin, TokenResponse, RefreshTokenRequest, UserResponse,
+)
+from app.services.auth import (
+    hash_password, verify_password, create_access_token, create_refresh_token,
+    decode_token, create_audit_log,
+)
+from app.middleware import get_current_user
+import httpx
+
+router = APIRouter(prefix="/api/auth", tags=["Authentication"])
+
+
+@router.post("/register", response_model=TokenResponse, status_code=201)
+async def register(data: UserCreate, db: AsyncSession = Depends(get_db)):
+    existing = await db.execute(select(User).where(User.email == data.email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    org = Organization(
+        name=f"{data.name or data.email.split('@')[0]}'s Org",
+        slug=data.email.split('@')[0],
+    )
+    db.add(org)
+    await db.flush()
+
+    user = User(
+        org_id=org.id,
+        email=data.email,
+        password_hash=hash_password(data.password),
+        name=data.name,
+        role=data.role,
+    )
+    db.add(user)
+    await db.flush()
+
+    await create_audit_log(db, org.id, user.id, "user.register", "user", user.id)
+
+    access_token = create_access_token(user.id)
+    refresh_token = create_refresh_token(user.id)
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user=UserResponse.model_validate(user),
+    )
+
+
+@router.post("/login", response_model=TokenResponse)
+async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
+
+    if not user or not user.password_hash or not verify_password(data.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account is disabled")
+
+    await create_audit_log(db, user.org_id, user.id, "user.login", "user", user.id)
+
+    access_token = create_access_token(user.id)
+    refresh_token = create_refresh_token(user.id)
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user=UserResponse.model_validate(user),
+    )
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_token(data: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        payload = decode_token(data.refresh_token)
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=400, detail="Invalid token type")
+        user_id = payload.get("sub")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    access_token = create_access_token(user.id)
+    refresh_token = create_refresh_token(user.id)
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user=UserResponse.model_validate(user),
+    )
+
+
+@router.post("/logout")
+async def logout(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await create_audit_log(db, current_user.org_id, current_user.id, "user.logout", "user", current_user.id)
+    return {"message": "Logged out successfully"}
+
+
+@router.post("/github/callback", response_model=TokenResponse)
+async def github_callback(
+    code: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.config import settings
+
+    if not settings.GITHUB_CLIENT_ID or not settings.GITHUB_CLIENT_SECRET:
+        raise HTTPException(status_code=400, detail="GitHub OAuth not configured")
+
+    async with httpx.AsyncClient() as client:
+        token_resp = await client.post(
+            "https://github.com/login/oauth/access_token",
+            json={
+                "client_id": settings.GITHUB_CLIENT_ID,
+                "client_secret": settings.GITHUB_CLIENT_SECRET,
+                "code": code,
+            },
+            headers={"Accept": "application/json"},
+        )
+        token_data = token_resp.json()
+
+    if "error" in token_data:
+        raise HTTPException(status_code=400, detail=token_data.get("error_description", "GitHub OAuth failed"))
+
+    access_token = token_data.get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=400, detail="No access token received")
+
+    async with httpx.AsyncClient() as client:
+        user_resp = await client.get(
+            "https://api.github.com/user",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        if user_resp.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch GitHub user")
+        github_user = user_resp.json()
+
+    github_id = str(github_user["id"])
+    email = github_user.get("email") or f"{github_user['login']}@github.user"
+    name = github_user.get("name") or github_user["login"]
+
+    result = await db.execute(select(User).where(User.github_id == github_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        result = await db.execute(select(User).where(User.email == email))
+        user = result.scalar_one_or_none()
+
+    if user:
+        user.github_id = github_id
+        user.name = name
+        user.avatar_url = github_user.get("avatar_url")
+        if not user.password_hash:
+            import secrets
+            user.password_hash = hash_password(secrets.token_urlsafe(32))
+        org_id = user.org_id
+    else:
+        org = Organization(
+            name=f"{name}'s Org",
+            slug=github_user["login"],
+        )
+        db.add(org)
+        await db.flush()
+        org_id = org.id
+
+        user = User(
+            org_id=org_id,
+            email=email,
+            name=name,
+            github_id=github_id,
+            avatar_url=github_user.get("avatar_url"),
+            role="dev",
+        )
+        db.add(user)
+        await db.flush()
+
+    from app.models import Integration
+    integ = Integration(
+        org_id=org_id,
+        provider="github",
+        access_token=access_token,
+        config={"login": github_user["login"]},
+    )
+    db.add(integ)
+    await db.flush()
+
+    await create_audit_log(db, org_id, user.id, "user.github_login", "user", user.id)
+
+    jwt_token = create_access_token(user.id)
+    refresh = create_refresh_token(user.id)
+
+    return TokenResponse(
+        access_token=jwt_token,
+        refresh_token=refresh,
+        user=UserResponse.model_validate(user),
+    )
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_me(current_user: User = Depends(get_current_user)):
+    return UserResponse.model_validate(current_user)
