@@ -17,6 +17,12 @@ services:
         generateValue: true
       - key: APP_URL
         value: https://securereview-ai-backend.onrender.com
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
 
 databases:
   - name: securereview-db
