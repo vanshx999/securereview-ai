@@ -53,6 +53,7 @@ async def add_rate_limit_middleware(request: Request, call_next):
 app.include_router(auth.router)
 app.include_router(orgs.router)
 app.include_router(repositories.router)
+app.include_router(repositories.repositories_router)
 app.include_router(pr_review.router)
 app.include_router(findings.router)
 app.include_router(policies.router)

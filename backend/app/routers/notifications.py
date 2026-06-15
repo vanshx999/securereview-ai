@@ -119,11 +119,28 @@ async def update_settings(
     return {"message": f"Notification settings updated for {data.channel}"}
 
 
-@router.post("/test")
-async def send_test(
-    channel: str = Query(..., regex="^(slack|discord|email)$"),
+@router.post("/test/{channel}")
+async def send_test_by_path(
+    channel: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+):
+    return await _send_notification_test(db, current_user, channel)
+
+
+@router.post("/test")
+async def send_test(
+    channel: str = Query(..., pattern="^(slack|discord|email)$"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await _send_notification_test(db, current_user, channel)
+
+
+async def _send_notification_test(
+    db: AsyncSession,
+    current_user: User,
+    channel: str,
 ):
     result = await db.execute(
         select(NotificationSetting).where(

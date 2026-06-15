@@ -18,15 +18,15 @@ Output ONLY a valid JSON object with these exact fields:
   "severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
   "description": "Brief description of what this rule checks",
   "condition": "When this rule triggers (natural language)",
-  "message_template": "Template for violation message, use {file}, {line} placeholders"
+  "message_template": "Template for violation message, use {{file}}, {{line}} placeholders"
 }}
 
 Examples:
 1. Rule: "Flag any function handling PII that calls logger.info without calling approved_anonymize first"
-   -> {{"type": "data_flow", "pattern": "logger\\.(info|error|warning)\\(.*(?!approved_anonymize)", "file_patterns": ["*.py"], "severity": "HIGH", "description": "PII logged without anonymization", "condition": "When logger.info/error/warning is called without approved_anonymize in the same function", "message_template": "PII may be logged without anonymization in {file}:{line}"}}
+   -> {{"type": "data_flow", "pattern": "logger\\.(info|error|warning)\\(.*(?!approved_anonymize)", "file_patterns": ["*.py"], "severity": "HIGH", "description": "PII logged without anonymization", "condition": "When logger.info/error/warning is called without approved_anonymize in the same function", "message_template": "PII may be logged without anonymization in {{file}}:{{line}}"}}
 
 2. Rule: "Block any import of the os module in lambda handler files"
-   -> {{"type": "import_check", "pattern": "^import os\\b|^from os\\b", "file_patterns": ["**/handlers/*.py", "**/lambdas/*.py"], "severity": "MEDIUM", "description": "os module import not allowed in lambda handlers", "condition": "When os module is imported in a handler file", "message_template": "os module import not allowed in lambda handler at {file}:{line}"}}
+   -> {{"type": "import_check", "pattern": "^import os\\b|^from os\\b", "file_patterns": ["**/handlers/*.py", "**/lambdas/*.py"], "severity": "MEDIUM", "description": "os module import not allowed in lambda handlers", "condition": "When os module is imported in a handler file", "message_template": "os module import not allowed in lambda handler at {{file}}:{{line}}"}}
 
 Generate the JSON now:"""
 

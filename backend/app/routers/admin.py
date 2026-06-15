@@ -85,31 +85,91 @@ async def list_users(
 @router.post("/users/{user_id}/role")
 async def update_user_role(
     user_id: str,
-    role: str = Query(..., regex="^(admin|security|dev)$"),
+    role: str = Query(..., pattern="^(admin|security|dev)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
+    return await _update_role(user_id, role, db, current_user)
+
+
+@router.patch("/users/{user_id}/role", include_in_schema=False)
+async def update_user_role_patch(
+    user_id: str,
+    role: str = Query(..., pattern="^(admin|security|dev)$"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    return await _update_role(user_id, role, db, current_user)
+
+
+async def _update_role(user_id, role, db, current_user):
     result = await db.execute(
         select(User).where(User.id == user_id, User.org_id == current_user.org_id)
     )
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-
     if user.id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot change your own role")
-
     old_role = user.role.value
     user.role = UserRole(role)
     await db.commit()
-
     await create_audit_log(
         db, current_user.org_id, current_user.id,
         "admin.user.role_change", "user", user_id,
         {"old_role": old_role, "new_role": role},
     )
-
     return {"message": f"User role updated from {old_role} to {role}"}
+
+
+@router.get("/subscription")
+async def get_admin_subscription(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    result = await db.execute(
+        select(Subscription).where(Subscription.org_id == current_user.org_id).order_by(desc(Subscription.created_at)).limit(1)
+    )
+    sub = result.scalar_one_or_none()
+    org_result = await db.execute(select(Organization).where(Organization.id == current_user.org_id))
+    org = org_result.scalar_one_or_none()
+    return {
+        "plan": org.plan.value if org else "free",
+        "status": sub.status if sub else "inactive",
+        "current_period_start": sub.current_period_start.isoformat() if sub and sub.current_period_start else None,
+        "current_period_end": sub.current_period_end.isoformat() if sub and sub.current_period_end else None,
+        "cancel_at_period_end": sub.cancel_at_period_end if sub else False,
+    }
+
+
+@router.post("/compliance-report")
+async def export_admin_compliance_report(
+    format: str = Query(default="pdf", pattern="^(pdf|csv)$"),
+    date_from: str = None,
+    date_to: str = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    from app.services.compliance import generate_compliance_report, export_csv_report
+    from datetime import datetime
+    from fastapi.responses import Response
+    from app.services.auth import create_audit_log as _unused
+    parsed_from = datetime.fromisoformat(date_from) if date_from else None
+    parsed_to = datetime.fromisoformat(date_to) if date_to else None
+    if format == "csv":
+        content = await export_csv_report(db, current_user.org_id, parsed_from, parsed_to)
+        return Response(
+            content=content,
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=securereview-compliance-report.csv"},
+        )
+    else:
+        pdf_content = await generate_compliance_report(db, current_user.org_id, parsed_from, parsed_to)
+        return Response(
+            content=pdf_content,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=securereview-compliance-report.pdf"},
+        )
 
 
 @router.get("/stats")

@@ -6,7 +6,7 @@ from app.models import (
     User, Organization, Repository, PullRequest, Finding,
     FindingSeverity, FindingStatus, Policy, AuditLog,
 )
-from app.schemas import DashboardStats
+from app.schemas import DashboardStats, PullRequestResponse, FindingResponse
 from app.middleware import get_current_user
 from app.middleware.rbac import require_security_or_admin, require_admin
 from app.services.auth import create_audit_log
@@ -22,10 +22,9 @@ async def get_org_repo_ids(org_id: str, db: AsyncSession) -> list:
     return [r[0] for r in result.all()]
 
 
-@router.get("/metrics")
-async def get_dashboard_metrics(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+async def _build_dashboard_stats(
+    db: AsyncSession,
+    current_user: User,
 ):
     repo_ids = await get_org_repo_ids(current_user.org_id, db)
 
@@ -111,11 +110,62 @@ async def get_dashboard_metrics(
     )
 
 
-@router.get("/trends")
-async def get_trends(
-    days: int = Query(default=30, le=365),
+@router.get("/stats")
+async def get_dashboard_stats(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+):
+    return await _build_dashboard_stats(db, current_user)
+
+
+@router.get("/metrics")
+async def get_dashboard_metrics(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await _build_dashboard_stats(db, current_user)
+
+
+@router.get("/recent-prs")
+async def get_recent_prs(
+    limit: int = Query(default=10, le=50),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    repo_ids = await get_org_repo_ids(current_user.org_id, db)
+    if not repo_ids:
+        return []
+    result = await db.execute(
+        select(PullRequest)
+        .where(PullRequest.repo_id.in_(repo_ids))
+        .order_by(desc(PullRequest.created_at))
+        .limit(limit)
+    )
+    return [PullRequestResponse.model_validate(pr) for pr in result.scalars().all()]
+
+
+@router.get("/recent-findings")
+async def get_recent_findings(
+    limit: int = Query(default=20, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    repo_ids = await get_org_repo_ids(current_user.org_id, db)
+    if not repo_ids:
+        return []
+    result = await db.execute(
+        select(Finding)
+        .where(Finding.repo_id.in_(repo_ids))
+        .order_by(desc(Finding.created_at))
+        .limit(limit)
+    )
+    return [FindingResponse.model_validate(f) for f in result.scalars().all()]
+
+
+async def _build_trends(
+    db: AsyncSession,
+    current_user: User,
+    days: int = 30,
 ):
     repo_ids = await get_org_repo_ids(current_user.org_id, db)
     if not repo_ids:
@@ -183,9 +233,27 @@ async def get_trends(
     }
 
 
+@router.get("/vulnerability-trends")
+async def get_vulnerability_trends(
+    days: int = Query(default=14, le=365),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await _build_trends(db, current_user, days)
+
+
+@router.get("/trends")
+async def get_trends(
+    days: int = Query(default=30, le=365),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await _build_trends(db, current_user, days)
+
+
 @router.get("/compliance-report")
 async def get_compliance_report(
-    format: str = Query(default="pdf", regex="^(pdf|csv)$"),
+    format: str = Query(default="pdf", pattern="^(pdf|csv)$"),
     date_from: str = None,
     date_to: str = None,
     db: AsyncSession = Depends(get_db),

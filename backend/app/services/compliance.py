@@ -26,8 +26,11 @@ async def generate_compliance_report(
     if not date_from:
         date_from = date_to.replace(year=date_to.year - 1)
 
+    repo_ids_q = await db.execute(select(Repository.id).where(Repository.org_id == org_id))
+    repo_ids = [r[0] for r in repo_ids_q.all()]
     findings_result = await db.execute(
         select(Finding).where(
+            Finding.repo_id.in_(repo_ids) if repo_ids else False,
             Finding.created_at >= date_from,
             Finding.created_at <= date_to,
         )
@@ -253,12 +256,21 @@ async def render_pdf_report(report_data: dict) -> bytes:
 
 
 async def export_csv_report(db: AsyncSession, org_id: str, date_from=None, date_to=None) -> bytes:
-    from app.models import Finding
+    from app.models import Finding, Repository
     import csv
     import io
+    from datetime import datetime, timezone
 
+    if not date_to:
+        date_to = datetime.now(timezone.utc)
+    if not date_from:
+        date_from = date_to.replace(year=date_to.year - 1)
+
+    repo_ids_q = await db.execute(select(Repository.id).where(Repository.org_id == org_id))
+    repo_ids = [r[0] for r in repo_ids_q.all()]
     findings_result = await db.execute(
         select(Finding).where(
+            Finding.repo_id.in_(repo_ids) if repo_ids else False,
             Finding.created_at >= date_from,
             Finding.created_at <= date_to,
         )

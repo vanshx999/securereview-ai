@@ -116,7 +116,7 @@ AI_HALLUCINATION_PATTERNS = [
     (r'from\s+anthropic\s+import\s+', "Anthropic SDK import (verify version)", "LOW"),
     (r'import\s+(?:openai|OpenAI)\s*$', "OpenAI import (verify version)", "LOW"),
     (r'from\s+transformers\s+import\s+', "HuggingFace import (verify model name)", "LOW"),
-    (r'client\.(?:chat|completions|messages)\.create\s*\(\s*model\s*=\s*["\'](?:gpt|claude|llama|mixtral)[^"']*["\']', "LLM API call (verify model name)", "LOW"),
+    (r'client\.(?:chat|completions|messages)\.create\s*\(\s*model\s*=\s*["\"\'](?:gpt|claude|llama|mixtral)[^"\"\'"]*["\"\'"]', "LLM API call (verify model name)", "LOW"),
     (r'(?i)vector_store|VectorStore|Pinecone|Weaviate|Chroma|Qdrant', "Vector DB usage (verify correct SDK)", "LOW"),
     (r'(?i)embedding|Embedding|text-embedding-|ADA|ada-002', "Embeddings usage (verify API)", "LOW"),
     (r'(?i)function_calling|tool_use|tools\s*=\s*\[', "Function calling pattern (verify API version)", "LOW"),

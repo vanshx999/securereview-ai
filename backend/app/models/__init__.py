@@ -149,7 +149,7 @@ class PullRequest(Base):
     health_score = Column(Integer, default=100)
     total_findings = Column(Integer, default=0)
     critical_findings = Column(Integer, default=0)
-    metadata = Column(JSON, default=dict)
+    meta_data = Column(JSON, default=dict)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -177,7 +177,7 @@ class Finding(Base):
     status = Column(Enum(FindingStatus), default=FindingStatus.OPEN)
     dismissed_by = Column(String, ForeignKey("users.id"), nullable=True)
     dismissed_reason = Column(Text, nullable=True)
-    metadata = Column(JSON, default=dict)
+    meta_data = Column(JSON, default=dict)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -224,7 +224,7 @@ class AuditLog(Base):
     action = Column(String(255), nullable=False)
     entity_type = Column(String(255), nullable=False)
     entity_id = Column(String(255), nullable=True)
-    metadata = Column(JSON, default=dict)
+    meta_data = Column(JSON, default=dict)
     ip_address = Column(String(45), nullable=True)
     user_agent = Column(String(512), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)

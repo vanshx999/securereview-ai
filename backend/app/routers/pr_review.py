@@ -126,6 +126,40 @@ async def reanalyze_pr(
     return {"message": "Re-analysis queued", "pr_id": pr_id}
 
 
+@router.patch("/{pr_id}/findings/{finding_id}")
+async def update_pr_finding(
+    pr_id: str,
+    finding_id: str,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Finding).where(
+            Finding.id == finding_id,
+            Finding.pr_id == pr_id,
+            Finding.repo_id.in_(
+                select(Repository.id).where(Repository.org_id == current_user.org_id)
+            ),
+        )
+    )
+    finding = result.scalar_one_or_none()
+    if not finding:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    if data.get("status") == "dismissed":
+        finding.status = FindingStatus.DISMISSED
+        finding.dismissed_by = current_user.id
+        finding.dismissed_reason = data.get("dismissed_reason", "")
+    elif data.get("status") == "fixed":
+        finding.status = FindingStatus.FIXED
+    else:
+        for key, value in data.items():
+            if hasattr(finding, key):
+                setattr(finding, key, value)
+    await db.commit()
+    return {"message": "Finding updated", "finding_id": finding_id}
+
+
 @router.post("/{pr_id}/override")
 async def override_status_check(
     pr_id: str,

@@ -13,6 +13,48 @@ from app.services.auth import create_audit_log
 router = APIRouter(prefix="/api/policies", tags=["Policies"])
 
 
+@router.get("/")
+async def list_policies(
+    include_inactive: bool = False,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    query = select(Policy).where(Policy.org_id == current_user.org_id)
+    if not include_inactive:
+        query = query.where(Policy.is_active == True)
+    query = query.order_by(desc(Policy.created_at))
+    result = await db.execute(query)
+    return [PolicyResponse.model_validate(p) for p in result.scalars().all()]
+
+
+@router.post("/", response_model=PolicyResponse, status_code=201)
+async def create_policy(
+    data: PolicyCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_security_or_admin),
+):
+    compiled = await compile_natural_language_policy(data.natural_language_rule)
+    policy = Policy(
+        org_id=current_user.org_id,
+        name=data.name,
+        description=data.description,
+        natural_language_rule=data.natural_language_rule,
+        compiled_rule=compiled,
+        target_file_patterns=data.target_file_patterns,
+        severity=data.severity,
+        created_by=current_user.id,
+    )
+    db.add(policy)
+    await db.commit()
+    await db.refresh(policy)
+    await create_audit_log(
+        db, current_user.org_id, current_user.id,
+        "policy.create", "policy", policy.id,
+        {"name": policy.name},
+    )
+    return PolicyResponse.model_validate(policy)
+
+
 @router.get("/org/{org_id}")
 async def list_policies_by_org(
     org_id: str,
@@ -95,6 +137,7 @@ async def get_policy(
 
 
 @router.put("/{policy_id}", response_model=PolicyResponse)
+@router.patch("/{policy_id}", response_model=PolicyResponse, include_in_schema=False)
 async def update_policy(
     policy_id: str,
     data: PolicyUpdate,
@@ -131,6 +174,64 @@ async def update_policy(
     )
 
     return PolicyResponse.model_validate(policy)
+
+
+@router.post("/{policy_id}/compile")
+async def compile_policy(
+    policy_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_security_or_admin),
+):
+    result = await db.execute(
+        select(Policy).where(
+            Policy.id == policy_id,
+            Policy.org_id == current_user.org_id,
+        )
+    )
+    policy = result.scalar_one_or_none()
+    if not policy:
+        raise HTTPException(status_code=404, detail="Policy not found")
+
+    if not policy.natural_language_rule:
+        raise HTTPException(status_code=400, detail="Policy has no natural language rule to compile")
+
+    compiled = await compile_natural_language_policy(policy.natural_language_rule)
+    policy.compiled_rule = compiled
+    policy.version += 1
+    await db.commit()
+    await db.refresh(policy)
+
+    return {
+        "message": "Policy compiled successfully",
+        "compiled_rule": compiled,
+        "version": policy.version,
+    }
+
+
+@router.get("/{policy_id}/violations")
+async def get_policy_violations(
+    policy_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(PolicyViolation).where(
+            PolicyViolation.policy_id == policy_id,
+            PolicyViolation.org_id == current_user.org_id,
+        ).order_by(desc(PolicyViolation.created_at))
+    )
+    return [
+        {
+            "id": v.id,
+            "finding_id": v.finding_id,
+            "matched_text": v.matched_text,
+            "file_path": v.file_path,
+            "line_start": v.line_start,
+            "line_end": v.line_end,
+            "created_at": v.created_at.isoformat(),
+        }
+        for v in result.scalars().all()
+    ]
 
 
 @router.delete("/{policy_id}")

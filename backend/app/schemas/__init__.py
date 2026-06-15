@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, Any
 from datetime import datetime
 from app.models import UserRole, FindingSeverity, FindingStatus, PRStatus, SubscriptionPlan, BillingCycle, SubscriptionStatus, InvoiceStatus
@@ -127,6 +127,13 @@ class PolicyCreate(BaseModel):
     target_file_patterns: list[str] = []
     severity: FindingSeverity = FindingSeverity.HIGH
 
+    @field_validator('severity', mode='before')
+    @classmethod
+    def upper_severity(cls, v):
+        if isinstance(v, str):
+            return v.upper()
+        return v
+
 
 class PolicyUpdate(BaseModel):
     name: Optional[str] = None
@@ -135,6 +142,13 @@ class PolicyUpdate(BaseModel):
     target_file_patterns: Optional[list[str]] = None
     is_active: Optional[bool] = None
     severity: Optional[FindingSeverity] = None
+
+    @field_validator('severity', mode='before')
+    @classmethod
+    def upper_severity(cls, v):
+        if isinstance(v, str):
+            return v.upper()
+        return v
 
 
 class PolicyResponse(BaseModel):

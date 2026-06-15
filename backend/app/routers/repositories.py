@@ -14,6 +14,7 @@ from app.services.encryption import encrypt, decrypt
 import httpx
 
 router = APIRouter(prefix="/api/repos", tags=["Repositories"])
+repositories_router = APIRouter(prefix="/api/repositories", tags=["Repositories"])
 
 
 async def get_org_repos(org_id: str, db: AsyncSession):
@@ -261,3 +262,112 @@ async def get_repo_health(
 
 
 from sqlalchemy import case
+
+
+@repositories_router.get("/")
+async def list_repositories(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    repos = await get_org_repos(current_user.org_id, db)
+    results = []
+    for repo in repos:
+        last_pr_result = await db.execute(
+            select(PullRequest).where(PullRequest.repo_id == repo.id).order_by(desc(PullRequest.created_at)).limit(1)
+        )
+        last_pr = last_pr_result.scalar_one_or_none()
+        findings_result = await db.execute(
+            select(func.count()).select_from(Finding).where(
+                Finding.repo_id == repo.id,
+                Finding.status == "open",
+            )
+        )
+        results.append({
+            **RepositoryResponse.model_validate(repo).model_dump(),
+            "last_analyzed_at": last_pr.created_at.isoformat() if last_pr else None,
+            "open_findings": findings_result.scalar() or 0,
+            "total_prs": 0,
+        })
+    return results
+
+
+@repositories_router.get("/{repo_id}")
+async def get_repository(
+    repo_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Repository).where(Repository.id == repo_id, Repository.org_id == current_user.org_id)
+    )
+    repo = result.scalar_one_or_none()
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    return RepositoryResponse.model_validate(repo)
+
+
+@repositories_router.delete("/{repo_id}")
+async def delete_repository(
+    repo_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Repository).where(Repository.id == repo_id, Repository.org_id == current_user.org_id)
+    )
+    repo = result.scalar_one_or_none()
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    if current_user.role not in [UserRole.ADMIN, UserRole.SECURITY]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    repo.is_active = False
+    await db.commit()
+    await create_audit_log(db, current_user.org_id, current_user.id, "repo.deactivate", "repository", repo_id)
+    return {"message": "Repository deactivated"}
+
+
+@repositories_router.post("/install-github")
+async def install_github_repos(
+    code: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    result = await db.execute(
+        select(Integration).where(
+            Integration.org_id == current_user.org_id,
+            Integration.provider == "github",
+            Integration.is_active == True,
+        )
+    )
+    integration = result.scalar_one_or_none()
+    if not integration or not integration.access_token:
+        raise HTTPException(status_code=400, detail="No GitHub integration. Complete OAuth first.")
+    token = integration.access_token
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            "https://api.github.com/user/repos?per_page=100&sort=updated",
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"},
+        )
+        if resp.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch repos from GitHub")
+        gh_repos = resp.json()
+        created = 0
+        for gh_repo in gh_repos:
+            existing = await db.execute(
+                select(Repository).where(Repository.github_repo_id == gh_repo["id"])
+            )
+            if not existing.scalar_one_or_none():
+                repo = Repository(
+                    org_id=current_user.org_id,
+                    github_repo_id=gh_repo["id"],
+                    name=gh_repo["name"],
+                    full_name=gh_repo["full_name"],
+                    git_provider="github",
+                    default_branch=gh_repo.get("default_branch", "main"),
+                    is_active=True,
+                )
+                db.add(repo)
+                created += 1
+        await db.commit()
+    await create_audit_log(db, current_user.org_id, current_user.id, "repos.install", "repository", None, {"count": created})
+    return {"message": f"Installed {created} repository(s)", "count": created}

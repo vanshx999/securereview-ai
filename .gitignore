@@ -3,6 +3,9 @@ __pycache__/
 *.pyc
 .env
 .env.local
+*.db
+venv/
+.venv/
 *.egg-info/
 dist/
 build/
