@@ -1,6 +1,7 @@
 import type { AuthTokens, User } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const _raw = import.meta.env.VITE_API_URL || '';
+const API_BASE = _raw ? `${_raw.replace(/\/+$/, '')}/api` : '/api';
 
 async function request<T>(
   endpoint: string,
