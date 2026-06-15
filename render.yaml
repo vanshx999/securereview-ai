@@ -18,15 +18,6 @@ services:
       - key: APP_URL
         value: https://securereview-ai-backend.onrender.com
 
-staticSites:
-  - name: securereview-ai-frontend
-    buildCommand: npm ci && npm run build
-    staticPublishPath: dist
-    pullRequestPreviews: true
-    envVars:
-      - key: VITE_API_URL
-        value: https://securereview-ai-backend.onrender.com
-
 databases:
   - name: securereview-db
     plan: free
