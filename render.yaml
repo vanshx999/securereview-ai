@@ -23,6 +23,10 @@ services:
         value: production
       - key: DEBUG
         value: "false"
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
 
 databases:
   - name: securereview-db
