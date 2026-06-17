@@ -42,65 +42,70 @@ async def github_webhook(
         installation = payload.get("installation", {})
         gh_account = payload.get("account", {}) or {}
         repos = payload.get("repositories", [])
-
-        if action == "created":
-            integration_result = await db.execute(
-                select(Integration).where(
-                    Integration.provider == "github",
-                    Integration.config['installation_id'].as_string() == str(installation.get("id")),
-                )
-            )
-            if not integration_result.scalar_one_or_none():
-                org_result = await db.execute(
-                    select(Organization).where(Organization.slug == gh_account.get("login"))
-                )
-                org = org_result.scalar_one_or_none()
-                if not org:
-                    org = Organization(
-                        name=gh_account.get("login", "GitHub User"),
-                        slug=gh_account.get("login", f"gh-{installation.get('id')}"),
+        error_msg = None
+        try:
+            if action == "created":
+                integration_result = await db.execute(
+                    select(Integration).where(
+                        Integration.provider == "github",
+                        Integration.config['installation_id'].as_string() == str(installation.get("id")),
                     )
-                    db.add(org)
-                    await db.flush()
-
-                integration = Integration(
-                    org_id=org.id,
-                    provider="github",
-                    access_token=installation.get("access_tokens_url", ""),
-                    config={"installation_id": installation.get("id"), "account": gh_account.get("login")},
                 )
-                db.add(integration)
-
-                for repo_data in repos:
-                    existing = await db.execute(
-                        select(Repository).where(Repository.github_repo_id == repo_data["id"])
+                if not integration_result.scalar_one_or_none():
+                    org_result = await db.execute(
+                        select(Organization).where(Organization.slug == gh_account.get("login"))
                     )
-                    if not existing.scalar_one_or_none():
-                        repo = Repository(
-                            org_id=org.id,
-                            github_repo_id=repo_data["id"],
-                            name=repo_data["name"],
-                            full_name=repo_data["full_name"],
-                            git_provider="github",
-                            is_active=True,
+                    org = org_result.scalar_one_or_none()
+                    if not org:
+                        org = Organization(
+                            name=gh_account.get("login", "GitHub User"),
+                            slug=gh_account.get("login", f"gh-{installation.get('id')}"),
                         )
-                        db.add(repo)
+                        db.add(org)
+                        await db.flush()
 
-                await db.commit()
+                    integration = Integration(
+                        org_id=org.id,
+                        provider="github",
+                        access_token=installation.get("access_tokens_url", ""),
+                        config={"installation_id": installation.get("id"), "account": gh_account.get("login")},
+                    )
+                    db.add(integration)
 
-        elif action == "deleted":
-            result = await db.execute(
-                select(Integration).where(
-                    Integration.provider == "github",
-                    Integration.config['installation_id'].as_string() == str(installation.get("id")),
+                    for repo_data in repos:
+                        existing = await db.execute(
+                            select(Repository).where(Repository.github_repo_id == repo_data["id"])
+                        )
+                        if not existing.scalar_one_or_none():
+                            repo = Repository(
+                                org_id=org.id,
+                                github_repo_id=repo_data["id"],
+                                name=repo_data["name"],
+                                full_name=repo_data["full_name"],
+                                git_provider="github",
+                                is_active=True,
+                            )
+                            db.add(repo)
+
+                    await db.commit()
+
+            elif action == "deleted":
+                result = await db.execute(
+                    select(Integration).where(
+                        Integration.provider == "github",
+                        Integration.config['installation_id'].as_string() == str(installation.get("id")),
+                    )
                 )
-            )
-            integration = result.scalar_one_or_none()
-            if integration:
-                integration.is_active = False
-                await db.commit()
+                integration = result.scalar_one_or_none()
+                if integration:
+                    integration.is_active = False
+                    await db.commit()
+        except Exception as exc:
+            error_msg = str(exc)[:500]
+            webhook_event.error = error_msg
+            await db.commit()
 
-        return {"status": "processed", "event": f"installation.{action}"}
+        return {"status": "processed", "event": f"installation.{action}", "error": error_msg}
 
     if event == "installation_repositories":
         action = payload.get("action")
