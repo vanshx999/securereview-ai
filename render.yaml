@@ -25,10 +25,6 @@ services:
         value: "false"
       - key: FRONTEND_URL
         value: https://securereview-ai-nr4e.vercel.app
-      - key: GITHUB_CLIENT_ID
-        sync: false
-      - key: GITHUB_CLIENT_SECRET
-        sync: false
 
 databases:
   - name: securereview-db
