@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../hooks/useAuth';
-import { Shield, Eye, EyeOff } from 'lucide-react';
+import { Shield, Eye, EyeOff, Github } from 'lucide-react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -82,6 +82,29 @@ export default function LoginPage() {
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-700"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="bg-gray-900 px-2 text-gray-500">or continue with</span>
+            </div>
+          </div>
+
+          {import.meta.env.VITE_GITHUB_CLIENT_ID ? (
+            <button
+              type="button"
+              onClick={() => {
+                const redirectUri = `${window.location.origin}/auth/github/callback`;
+                const url = `https://github.com/login/oauth/authorize?client_id=${import.meta.env.VITE_GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user,user:email`;
+                window.location.href = url;
+              }}
+              className="btn-secondary w-full flex items-center justify-center gap-2"
+            >
+              <Github className="w-4 h-4" /> Sign in with GitHub
+            </button>
+          ) : null}
 
           <p className="text-center text-sm text-gray-500 mt-6">
             Don't have an account?{' '}

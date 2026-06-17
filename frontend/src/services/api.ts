@@ -88,6 +88,8 @@ export const api = {
         body: JSON.stringify({ email, password, name, role }),
       }),
     me: () => request<User>('/auth/me'),
+    githubLogin: (code: string) =>
+      request<AuthTokens>(`/auth/github/callback?code=${code}`, { method: 'POST' }),
   },
   dashboard: {
     stats: () => request<any>('/dashboard/stats'),
