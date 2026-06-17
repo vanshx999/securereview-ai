@@ -92,19 +92,21 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {import.meta.env.VITE_GITHUB_CLIENT_ID ? (
-            <button
-              type="button"
-              onClick={() => {
-                const redirectUri = `${window.location.origin}/auth/github/callback`;
-                const url = `https://github.com/login/oauth/authorize?client_id=${import.meta.env.VITE_GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user,user:email`;
-                window.location.href = url;
-              }}
-              className="btn-secondary w-full flex items-center justify-center gap-2"
-            >
-              <Github className="w-4 h-4" /> Sign in with GitHub
-            </button>
-          ) : null}
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/github/authorize-url`);
+                const data = await res.json();
+                if (data.url) window.location.href = data.url;
+              } catch {
+                setError('GitHub login is not configured');
+              }
+            }}
+            className="btn-secondary w-full flex items-center justify-center gap-2"
+          >
+            <Github className="w-4 h-4" /> Sign in with GitHub
+          </button>
 
           <p className="text-center text-sm text-gray-500 mt-6">
             Don't have an account?{' '}

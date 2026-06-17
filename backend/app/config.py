@@ -5,6 +5,7 @@ from typing import Optional
 class Settings(BaseSettings):
     APP_NAME: str = "SecureReview AI"
     APP_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str = "http://localhost:5173"
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
 

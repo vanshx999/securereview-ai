@@ -108,6 +108,23 @@ async def logout(
     return {"message": "Logged out successfully"}
 
 
+@router.get("/github/authorize-url")
+async def github_authorize_url():
+    from app.config import settings
+
+    if not settings.GITHUB_CLIENT_ID:
+        raise HTTPException(status_code=400, detail="GitHub OAuth not configured")
+
+    redirect_uri = f"{settings.FRONTEND_URL}/auth/github/callback"
+    url = (
+        f"https://github.com/login/oauth/authorize"
+        f"?client_id={settings.GITHUB_CLIENT_ID}"
+        f"&redirect_uri={redirect_uri}"
+        f"&scope=read:user,user:email"
+    )
+    return {"url": url}
+
+
 @router.post("/github/callback", response_model=TokenResponse)
 async def github_callback(
     code: str,
