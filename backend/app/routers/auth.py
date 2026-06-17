@@ -108,6 +108,17 @@ async def logout(
     return {"message": "Logged out successfully"}
 
 
+@router.get("/github/status")
+async def github_status():
+    from app.config import settings
+    return {
+        "client_id": settings.GITHUB_CLIENT_ID,
+        "client_secret_set": bool(settings.GITHUB_CLIENT_SECRET),
+        "frontend_url": settings.FRONTEND_URL,
+        "app_url": settings.APP_URL,
+    }
+
+
 @router.get("/github/authorize-url")
 async def github_authorize_url():
     from app.config import settings
