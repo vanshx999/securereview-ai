@@ -159,12 +159,11 @@ async def github_callback(
         )
         token_data = token_resp.json()
 
-    import logging
-    logging.warning(f"github callback response: {token_data}")
-    logging.warning(f"used client_id: {settings.GITHUB_CLIENT_ID}")
-
     if "error" in token_data:
-        raise HTTPException(status_code=400, detail=token_data.get("error_description", "GitHub OAuth failed"))
+        raise HTTPException(
+            status_code=400,
+            detail=f"GitHub OAuth error: {token_data.get('error')} — {token_data.get('error_description', '')}",
+        )
 
     access_token = token_data.get("access_token")
     if not access_token:
