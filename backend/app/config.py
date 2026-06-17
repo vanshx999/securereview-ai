@@ -54,9 +54,6 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_MB: int = 10
     RATE_LIMIT_PER_MINUTE: int = 60
 
-    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
-
     DATA_RETENTION_DAYS: int = 7
     FINDING_RETENTION_DAYS: int = 365
 

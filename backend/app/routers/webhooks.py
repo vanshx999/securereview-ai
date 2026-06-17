@@ -9,8 +9,9 @@ from app.models import (
 from app.middleware.webhook_verification import (
     verify_github_webhook, verify_gitlab_webhook, verify_stripe_webhook,
 )
-from app.tasks import analyze_pr_task
+from app.tasks import analyze_pr
 from app.services.encryption import encrypt, decrypt
+import asyncio
 import httpx
 
 router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
@@ -213,7 +214,7 @@ async def github_webhook(
         await db.refresh(pr)
 
         if diff_data:
-            analyze_pr_task.delay(pr.id)
+            asyncio.ensure_future(analyze_pr(pr.id))
 
         webhook_event.processed = True
         await db.commit()
@@ -296,7 +297,7 @@ async def gitlab_webhook(
         await db.refresh(pr)
 
         if diff_data:
-            analyze_pr_task.delay(pr.id)
+            asyncio.ensure_future(analyze_pr(pr.id))
 
         webhook_event.processed = True
         await db.commit()

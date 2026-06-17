@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
@@ -11,7 +12,7 @@ from app.middleware import get_current_user
 from app.middleware.rbac import require_security_or_admin, require_role
 from app.middleware.rate_limit import check_org_analysis_rate_limit
 from app.services.auth import create_audit_log
-from app.tasks import analyze_pr_task
+from app.tasks import analyze_pr
 
 router = APIRouter(prefix="/api/prs", tags=["Pull Requests"])
 
@@ -122,7 +123,7 @@ async def reanalyze_pr(
 
     await check_org_analysis_rate_limit(current_user.org_id)
 
-    analyze_pr_task.delay(pr_id)
+    asyncio.ensure_future(analyze_pr(pr_id))
     return {"message": "Re-analysis queued", "pr_id": pr_id}
 
 
