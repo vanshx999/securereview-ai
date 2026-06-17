@@ -121,15 +121,16 @@ async def github_status():
     recent_webhooks = []
     try:
         async with async_session_factory() as db:
-            w = await db.execute(select(WebhookEvent).limit(5))
+            from sqlalchemy import desc, func
+            w = await db.execute(select(WebhookEvent).order_by(desc(WebhookEvent.created_at)).limit(10))
             recent_webhooks = [{"event": wh.event_type, "error": wh.error, "processed": wh.processed} for wh in w.scalars().all()]
-            webhook_count = (await db.execute(select(type(WebhookEvent)).statement.with_only_columns(WebhookEvent.id).limit(None))).rowcount
-            i = await db.execute(select(Integration))
-            integration_count = len(i.scalars().all())
-            r = await db.execute(select(Repository))
-            repo_count = len(r.scalars().all())
-    except Exception:
-        pass
+            webhook_count = (await db.execute(select(func.count()).select_from(WebhookEvent))).scalar() or 0
+            i_result = await db.execute(select(func.count()).select_from(Integration))
+            integration_count = i_result.scalar() or 0
+            r_result = await db.execute(select(func.count()).select_from(Repository))
+            repo_count = r_result.scalar() or 0
+    except Exception as e:
+        return {"error": str(e)}
 
     return {
         "client_id": settings.GITHUB_CLIENT_ID,
