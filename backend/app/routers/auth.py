@@ -134,6 +134,8 @@ async def github_status():
     return {
         "client_id": settings.GITHUB_CLIENT_ID,
         "client_secret_set": bool(settings.GITHUB_CLIENT_SECRET),
+        "webhook_secret_set": bool(settings.GITHUB_WEBHOOK_SECRET),
+        "webhook_secret_preview": (settings.GITHUB_WEBHOOK_SECRET or "")[:8] + "...",
         "frontend_url": settings.FRONTEND_URL,
         "app_url": settings.APP_URL,
         "webhooks_received": webhook_count,
