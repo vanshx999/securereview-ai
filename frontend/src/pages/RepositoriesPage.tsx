@@ -32,8 +32,14 @@ export default function RepositoriesPage() {
     }
   };
 
-  const handleInstallGithub = () => {
-    window.open('https://github.com/apps/securereview-ai/installations/new', '_blank');
+  const handleInstallGithub = async () => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/repositories/install-url`);
+      const data = await res.json();
+      if (data.url) window.open(data.url, '_blank');
+    } catch {
+      window.open('https://github.com/apps/securereview-ai/installations/new', '_blank');
+    }
   };
 
   if (loading) {

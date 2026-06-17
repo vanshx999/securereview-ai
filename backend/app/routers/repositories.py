@@ -264,6 +264,13 @@ async def get_repo_health(
 from sqlalchemy import case
 
 
+@repositories_router.get("/install-url")
+async def get_install_url():
+    from app.config import settings
+    url = settings.GITHUB_INSTALLATION_URL or ""
+    return {"url": url}
+
+
 @repositories_router.get("/")
 async def list_repositories(
     db: AsyncSession = Depends(get_db),
