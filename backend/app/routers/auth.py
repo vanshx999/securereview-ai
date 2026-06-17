@@ -123,13 +123,14 @@ async def github_status():
 async def github_authorize_url():
     from app.config import settings
 
-    if not settings.GITHUB_CLIENT_ID:
+    client_id = (settings.GITHUB_CLIENT_ID or "").strip()
+    if not client_id:
         raise HTTPException(status_code=400, detail="GitHub OAuth not configured")
 
     redirect_uri = f"{settings.FRONTEND_URL}/auth/github/callback"
     url = (
         f"https://github.com/login/oauth/authorize"
-        f"?client_id={settings.GITHUB_CLIENT_ID}"
+        f"?client_id={client_id}"
         f"&redirect_uri={redirect_uri}"
         f"&scope=read:user,user:email"
     )
@@ -144,15 +145,17 @@ async def github_callback(
 ):
     from app.config import settings
 
-    if not settings.GITHUB_CLIENT_ID or not settings.GITHUB_CLIENT_SECRET:
+    client_id = (settings.GITHUB_CLIENT_ID or "").strip()
+    client_secret = (settings.GITHUB_CLIENT_SECRET or "").strip()
+    if not client_id or not client_secret:
         raise HTTPException(status_code=400, detail="GitHub OAuth not configured")
 
     async with httpx.AsyncClient() as client:
         token_resp = await client.post(
             "https://github.com/login/oauth/access_token",
-            json={
-                "client_id": settings.GITHUB_CLIENT_ID,
-                "client_secret": settings.GITHUB_CLIENT_SECRET,
+            data={
+                "client_id": client_id,
+                "client_secret": client_secret,
                 "code": code,
             },
             headers={"Accept": "application/json"},
@@ -162,7 +165,7 @@ async def github_callback(
     if "error" in token_data:
         raise HTTPException(
             status_code=400,
-            detail=f"GitHub OAuth error: {token_data.get('error')} — {token_data.get('error_description', '')}",
+            detail=f"GitHub error: {token_data.get('error')} — {token_data.get('error_description', '')}",
         )
 
     access_token = token_data.get("access_token")
