@@ -111,11 +111,35 @@ async def logout(
 @router.get("/github/status")
 async def github_status():
     from app.config import settings
+    from app.database import async_session_factory
+    from sqlalchemy import select
+    from app.models import Integration, Repository, WebhookEvent
+
+    webhook_count = 0
+    integration_count = 0
+    repo_count = 0
+    recent_webhooks = []
+    try:
+        async with async_session_factory() as db:
+            w = await db.execute(select(WebhookEvent).limit(5))
+            recent_webhooks = [{"event": wh.event_type, "error": wh.error, "processed": wh.processed} for wh in w.scalars().all()]
+            webhook_count = (await db.execute(select(type(WebhookEvent)).statement.with_only_columns(WebhookEvent.id).limit(None))).rowcount
+            i = await db.execute(select(Integration))
+            integration_count = len(i.scalars().all())
+            r = await db.execute(select(Repository))
+            repo_count = len(r.scalars().all())
+    except Exception:
+        pass
+
     return {
         "client_id": settings.GITHUB_CLIENT_ID,
         "client_secret_set": bool(settings.GITHUB_CLIENT_SECRET),
         "frontend_url": settings.FRONTEND_URL,
         "app_url": settings.APP_URL,
+        "webhooks_received": webhook_count,
+        "recent_webhooks": recent_webhooks,
+        "integrations": integration_count,
+        "repos_in_db": repo_count,
     }
 
 
