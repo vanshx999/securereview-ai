@@ -11,6 +11,7 @@ from app.middleware.webhook_verification import (
 )
 from app.tasks import analyze_pr
 from app.services.encryption import encrypt, decrypt
+from app.services.github_integration import get_installation_access_token
 import asyncio
 import httpx
 
@@ -178,17 +179,24 @@ async def github_webhook(
                 )
             )
             integration = integration_result.scalar_one_or_none()
-            if integration and integration.access_token:
-                try:
-                    async with httpx.AsyncClient() as client:
-                        resp = await client.get(
-                            diff_url,
-                            headers={"Authorization": f"Bearer {integration.access_token}"},
-                        )
-                        if resp.status_code == 200:
-                            diff_data = resp.text
-                except Exception:
-                    pass
+            if integration:
+                install_id = integration.config.get("installation_id") if integration.config else None
+                token = None
+                if install_id:
+                    token = await get_installation_access_token(int(install_id))
+                if not token and integration.access_token:
+                    token = integration.access_token
+                if token:
+                    try:
+                        async with httpx.AsyncClient() as client:
+                            resp = await client.get(
+                                diff_url,
+                                headers={"Authorization": f"Bearer {token}"},
+                            )
+                            if resp.status_code == 200:
+                                diff_data = resp.text
+                    except Exception:
+                        pass
 
         pr_result = await db.execute(
             select(PullRequest).where(

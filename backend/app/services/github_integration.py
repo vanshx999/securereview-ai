@@ -1,10 +1,37 @@
 import hmac
 import hashlib
+import time
 from typing import Optional, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.config import settings
 from app.models import Repository, PullRequest, Finding, Integration
+import httpx
+from jose import jwt
+
+
+async def get_installation_access_token(installation_id: int) -> Optional[str]:
+    if not settings.GITHUB_APP_ID or not settings.GITHUB_APP_PRIVATE_KEY:
+        return None
+    now = int(time.time())
+    payload = {
+        "iat": now - 60,
+        "exp": now + 600,
+        "iss": str(settings.GITHUB_APP_ID),
+    }
+    token = jwt.encode(payload, settings.GITHUB_APP_PRIVATE_KEY, algorithm="RS256")
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"https://api.github.com/app/installations/{installation_id}/access_tokens",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github.v3+json",
+            },
+        )
+        if resp.status_code == 201:
+            data = resp.json()
+            return data.get("token")
+    return None
 
 SEVERITY_EMOJI = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}
 SEVERITY_LABEL = {"CRITICAL": "CRITICAL", "HIGH": "HIGH", "MEDIUM": "MEDIUM", "LOW": "LOW"}
