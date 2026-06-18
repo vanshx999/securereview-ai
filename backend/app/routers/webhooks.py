@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -14,6 +15,8 @@ from app.services.encryption import encrypt, decrypt
 from app.services.github_integration import get_installation_access_token
 import asyncio
 import httpx
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
 
@@ -33,18 +36,18 @@ async def github_webhook(
         payload=payload,
     )
     db.add(webhook_event)
-    await db.commit()
 
-    if event == "ping":
-        return {"status": "ok", "event": "ping"}
+    result_status = "ok"
 
-    if event == "installation":
-        action = payload.get("action")
-        installation = payload.get("installation", {})
-        gh_account = payload.get("account", {}) or {}
-        repos = payload.get("repositories", [])
-        error_msg = None
-        try:
+    try:
+        if event == "ping":
+            pass
+
+        elif event == "installation":
+            action = payload.get("action")
+            installation = payload.get("installation", {})
+            gh_account = payload.get("account", {}) or {}
+            repos = payload.get("repositories", [])
             if action == "created":
                 integration_result = await db.execute(
                     select(Integration).where(
@@ -88,8 +91,6 @@ async def github_webhook(
                             )
                             db.add(repo)
 
-                    await db.commit()
-
             elif action == "deleted":
                 result = await db.execute(
                     select(Integration).where(
@@ -100,158 +101,140 @@ async def github_webhook(
                 integration = result.scalar_one_or_none()
                 if integration:
                     integration.is_active = False
-                    await db.commit()
-        except Exception as exc:
-            error_msg = str(exc)[:500]
-            webhook_event.error = error_msg
-            await db.commit()
 
-        return {"status": "processed", "event": f"installation.{action}", "error": error_msg}
+            result_status = f"installation.{action}"
 
-    if event == "installation_repositories":
-        action = payload.get("action")
-        repos_added = payload.get("repositories_added", [])
-        repos_removed = payload.get("repositories_removed", [])
+        elif event == "installation_repositories":
+            action = payload.get("action")
+            repos_added = payload.get("repositories_added", [])
+            repos_removed = payload.get("repositories_removed", [])
 
-        for repo_data in repos_added:
-            existing = await db.execute(
-                select(Repository).where(Repository.github_repo_id == repo_data["id"])
-            )
-            if not existing.scalar_one_or_none():
-                integration_result = await db.execute(
-                    select(Integration).where(
-                        Integration.provider == "github",
-                        Integration.config['installation_id'].as_string() == str(payload.get("installation", {}).get("id")),
-                    )
+            for repo_data in repos_added:
+                existing = await db.execute(
+                    select(Repository).where(Repository.github_repo_id == repo_data["id"])
                 )
-                integration = integration_result.scalar_one_or_none()
-                if integration:
-                    repo = Repository(
-                        org_id=integration.org_id,
-                        github_repo_id=repo_data["id"],
-                        name=repo_data["name"],
-                        full_name=repo_data["full_name"],
-                        git_provider="github",
-                        is_active=True,
+                if not existing.scalar_one_or_none():
+                    integration_result = await db.execute(
+                        select(Integration).where(
+                            Integration.provider == "github",
+                            Integration.config['installation_id'].as_string() == str(payload.get("installation", {}).get("id")),
+                        )
                     )
-                    db.add(repo)
-                    await db.commit()
+                    integration = integration_result.scalar_one_or_none()
+                    if integration:
+                        repo = Repository(
+                            org_id=integration.org_id,
+                            github_repo_id=repo_data["id"],
+                            name=repo_data["name"],
+                            full_name=repo_data["full_name"],
+                            git_provider="github",
+                            is_active=True,
+                        )
+                        db.add(repo)
 
-        for repo_data in repos_removed:
-            result = await db.execute(
-                select(Repository).where(Repository.github_repo_id == repo_data["id"])
-            )
-            repo = result.scalar_one_or_none()
-            if repo:
-                repo.is_active = False
-                await db.commit()
-
-        return {"status": "processed", "event": f"installation_repositories.{action}"}
-
-    if event == "pull_request":
-        action = payload.get("action")
-        if action not in ["opened", "synchronize", "reopened"]:
-            return {"status": "ignored", "action": action}
-
-        pr_data = payload.get("pull_request", {})
-        gh_repo = payload.get("repository", {})
-        gh_repo_id = gh_repo.get("id")
-        webhook_event.error = f"step: got repo_id={gh_repo_id}"
-        await db.commit()
-
-        result = await db.execute(
-            select(Repository).where(Repository.github_repo_id == gh_repo_id)
-        )
-        repo = result.scalar_one_or_none()
-        if not repo or not repo.is_active:
-            webhook_event.processed = True
-            webhook_event.error = f"Repository not found or inactive (repo_id={gh_repo_id})"
-            await db.commit()
-            return {"status": "ignored", "reason": "repo_not_found"}
-
-        webhook_event.error = f"step: repo={repo.full_name} ok"
-        await db.commit()
-
-        diff_url = pr_data.get("diff_url")
-        pr_number = pr_data.get("number")
-
-        diff_data = None
-        if diff_url:
-            integration_result = await db.execute(
-                select(Integration).where(
-                    Integration.org_id == repo.org_id,
-                    Integration.provider == "github",
-                    Integration.is_active == True,
+            for repo_data in repos_removed:
+                result = await db.execute(
+                    select(Repository).where(Repository.github_repo_id == repo_data["id"])
                 )
-            )
-            integration = integration_result.scalar_one_or_none()
-            if integration:
-                install_id = integration.config.get("installation_id") if integration.config else None
-                token = None
-                if install_id:
-                    token = await get_installation_access_token(int(install_id))
-                if not token and integration.access_token:
-                    token = integration.access_token
-                if token:
-                    try:
-                        async with httpx.AsyncClient() as client:
-                            resp = await client.get(
-                                diff_url,
-                                headers={"Authorization": f"Bearer {token}"},
+                repo = result.scalar_one_or_none()
+                if repo:
+                    repo.is_active = False
+
+            result_status = f"installation_repositories.{action}"
+
+        elif event == "pull_request":
+            action = payload.get("action")
+            if action not in ["opened", "synchronize", "reopened"]:
+                result_status = f"ignored_{action}"
+            else:
+                pr_data = payload.get("pull_request", {})
+                gh_repo = payload.get("repository", {})
+                gh_repo_id = gh_repo.get("id")
+
+                repo = (await db.execute(
+                    select(Repository).where(Repository.github_repo_id == gh_repo_id)
+                )).scalar_one_or_none()
+
+                if not repo or not repo.is_active:
+                    webhook_event.error = "Repository not found or inactive"
+                else:
+                    diff_url = pr_data.get("diff_url")
+                    pr_number = pr_data.get("number")
+                    diff_data = None
+
+                    if diff_url:
+                        integration_recs = await db.execute(
+                            select(Integration).where(
+                                Integration.org_id == repo.org_id,
+                                Integration.provider == "github",
+                                Integration.is_active == True,
                             )
-                            if resp.status_code == 200:
-                                diff_data = resp.text
-                    except Exception:
-                        pass
+                        )
+                        integration = integration_recs.scalar_one_or_none()
+                        if integration:
+                            install_id = None
+                            if integration.config:
+                                install_id = integration.config.get("installation_id")
+                            token = None
+                            if install_id:
+                                try:
+                                    token = await get_installation_access_token(int(install_id))
+                                except Exception as exc:
+                                    logger.warning("token_gen_failed: %s", exc)
+                            if not token and integration.access_token:
+                                token = integration.access_token
+                            if token:
+                                try:
+                                    async with httpx.AsyncClient() as client:
+                                        resp = await client.get(
+                                            diff_url,
+                                            headers={"Authorization": f"Bearer {token}"},
+                                        )
+                                        if resp.status_code == 200:
+                                            diff_data = resp.text
+                                except Exception as exc:
+                                    logger.warning("diff_fetch_failed: %s", exc)
 
-        webhook_event.error = f"step: diff fetched={bool(diff_data)}"
+                    pr = (await db.execute(
+                        select(PullRequest).where(
+                            PullRequest.repo_id == repo.id,
+                            PullRequest.pr_number == pr_number,
+                        )
+                    )).scalar_one_or_none()
+
+                    if pr:
+                        pr.commit_sha = pr_data.get("head", {}).get("sha", pr.commit_sha)
+                        pr.diff_data = diff_data or pr.diff_data
+                        pr.status = "open"
+                    else:
+                        pr = PullRequest(
+                            repo_id=repo.id,
+                            pr_number=pr_number,
+                            title=pr_data.get("title"),
+                            branch=pr_data.get("head", {}).get("ref", ""),
+                            base_branch=pr_data.get("base", {}).get("ref", ""),
+                            commit_sha=pr_data.get("head", {}).get("sha", ""),
+                            author=pr_data.get("user", {}).get("login"),
+                            diff_data=diff_data or "",
+                        )
+                        db.add(pr)
+
+                    await db.flush()
+                    webhook_event.processed = True
+
+                    if diff_data:
+                        asyncio.ensure_future(analyze_pr(pr.id))
+
+                    result_status = f"queued_pr_{pr_number}"
+
+        webhook_event.processed = True
+    except Exception as exc:
+        webhook_event.error = str(exc)[:500]
+        logger.exception("webhook_processing_error: event=%s error=%s", event, exc)
+    finally:
         await db.commit()
 
-        pr_result = await db.execute(
-            select(PullRequest).where(
-                PullRequest.repo_id == repo.id,
-                PullRequest.pr_number == pr_number,
-            )
-        )
-        pr = pr_result.scalar_one_or_none()
-
-        if pr:
-            pr.commit_sha = pr_data.get("head", {}).get("sha", pr.commit_sha)
-            pr.diff_data = diff_data or pr.diff_data
-            pr.status = "open"
-        else:
-            pr = PullRequest(
-                repo_id=repo.id,
-                pr_number=pr_number,
-                title=pr_data.get("title"),
-                branch=pr_data.get("head", {}).get("ref", ""),
-                base_branch=pr_data.get("base", {}).get("ref", ""),
-                commit_sha=pr_data.get("head", {}).get("sha", ""),
-                author=pr_data.get("user", {}).get("login"),
-                diff_data=diff_data or "",
-            )
-            db.add(pr)
-
-        try:
-            await db.commit()
-            await db.refresh(pr)
-
-            webhook_event.error = f"step: pr={pr.id} created"
-            await db.commit()
-
-            if diff_data:
-                asyncio.ensure_future(analyze_pr(pr.id))
-
-            webhook_event.processed = True
-            webhook_event.error = "ok"
-            await db.commit()
-        except Exception as exc:
-            webhook_event.error = f"final error: {str(exc)[:300]}"
-            await db.commit()
-
-        return {"status": "queued", "pr_id": pr.id, "pr_number": pr.pr_number}
-
-    return {"status": "received", "event": event}
+    return {"status": result_status, "event": event}
 
 
 @router.post("/gitlab")
