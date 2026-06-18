@@ -223,17 +223,17 @@ async def github_webhook(
             )
             db.add(pr)
 
-        await db.commit()
-        await db.refresh(pr)
-
         try:
+            await db.commit()
+            await db.refresh(pr)
+
             if diff_data:
                 asyncio.ensure_future(analyze_pr(pr.id))
 
             webhook_event.processed = True
             await db.commit()
         except Exception as exc:
-            webhook_event.error = f"post-processing error: {str(exc)[:200]}"
+            webhook_event.error = f"processing error: {str(exc)[:200]}"
             await db.commit()
 
         return {"status": "queued", "pr_id": pr.id, "pr_number": pr.pr_number}

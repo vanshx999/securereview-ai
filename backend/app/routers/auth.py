@@ -172,6 +172,8 @@ async def github_status():
             org_details = [{"slug": o[0], "org_id": o[1], "repos": o[2]} for o in orgs.all()]
             repo_list = await db.execute(select(Repository.id, Repository.github_repo_id, Repository.name, Repository.full_name, Repository.is_active))
             repo_details = [{"id": r[0], "github_id": r[1], "name": r[2], "full_name": r[3], "active": r[4]} for r in repo_list.all()]
+            pr_count_result = await db.execute(select(func.count()).select_from(PullRequest))
+            pr_count = pr_count_result.scalar() or 0
     except Exception as e:
         return {"error": str(e)}
 
@@ -186,6 +188,7 @@ async def github_status():
         "recent_webhooks": recent_webhooks,
         "integrations": integration_count,
         "repos_in_db": repo_count,
+        "prs_in_db": pr_count,
         "orgs": org_details,
         "repos": repo_details,
     }
