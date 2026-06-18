@@ -108,6 +108,22 @@ async def logout(
     return {"message": "Logged out successfully"}
 
 
+@router.post("/github/activate-bookfinder")
+async def activate_bookfinder():
+    from app.database import async_session_factory
+    from sqlalchemy import select, update
+    from app.models import Repository
+    try:
+        async with async_session_factory() as db:
+            await db.execute(
+                update(Repository).where(Repository.full_name == "vanshx999/Bookfinder").values(is_active=True)
+            )
+            await db.commit()
+            return {"message": "Bookfinder activated"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.post("/github/fix-org")
 async def fix_org():
     from app.database import async_session_factory
