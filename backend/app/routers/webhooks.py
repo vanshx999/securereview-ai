@@ -155,16 +155,22 @@ async def github_webhook(
 
         pr_data = payload.get("pull_request", {})
         gh_repo = payload.get("repository", {})
+        gh_repo_id = gh_repo.get("id")
+        webhook_event.error = f"step: got repo_id={gh_repo_id}"
+        await db.commit()
 
         result = await db.execute(
-            select(Repository).where(Repository.github_repo_id == gh_repo.get("id"))
+            select(Repository).where(Repository.github_repo_id == gh_repo_id)
         )
         repo = result.scalar_one_or_none()
         if not repo or not repo.is_active:
             webhook_event.processed = True
-            webhook_event.error = "Repository not found or inactive"
+            webhook_event.error = f"Repository not found or inactive (repo_id={gh_repo_id})"
             await db.commit()
             return {"status": "ignored", "reason": "repo_not_found"}
+
+        webhook_event.error = f"step: repo={repo.full_name} ok"
+        await db.commit()
 
         diff_url = pr_data.get("diff_url")
         pr_number = pr_data.get("number")
@@ -198,6 +204,9 @@ async def github_webhook(
                     except Exception:
                         pass
 
+        webhook_event.error = f"step: diff fetched={bool(diff_data)}"
+        await db.commit()
+
         pr_result = await db.execute(
             select(PullRequest).where(
                 PullRequest.repo_id == repo.id,
@@ -227,13 +236,17 @@ async def github_webhook(
             await db.commit()
             await db.refresh(pr)
 
+            webhook_event.error = f"step: pr={pr.id} created"
+            await db.commit()
+
             if diff_data:
                 asyncio.ensure_future(analyze_pr(pr.id))
 
             webhook_event.processed = True
+            webhook_event.error = "ok"
             await db.commit()
         except Exception as exc:
-            webhook_event.error = f"processing error: {str(exc)[:200]}"
+            webhook_event.error = f"final error: {str(exc)[:300]}"
             await db.commit()
 
         return {"status": "queued", "pr_id": pr.id, "pr_number": pr.pr_number}
