@@ -154,6 +154,8 @@ async def github_status():
             repo_count = r_result.scalar() or 0
             orgs = await db.execute(select(Organization.slug, Organization.id, func.count(Repository.id)).outerjoin(Repository, Repository.org_id == Organization.id).group_by(Organization.id))
             org_details = [{"slug": o[0], "org_id": o[1], "repos": o[2]} for o in orgs.all()]
+            repo_list = await db.execute(select(Repository.id, Repository.github_repo_id, Repository.name, Repository.full_name, Repository.is_active))
+            repo_details = [{"id": r[0], "github_id": r[1], "name": r[2], "full_name": r[3], "active": r[4]} for r in repo_list.all()]
     except Exception as e:
         return {"error": str(e)}
 
@@ -169,6 +171,7 @@ async def github_status():
         "integrations": integration_count,
         "repos_in_db": repo_count,
         "orgs": org_details,
+        "repos": repo_details,
     }
 
 
