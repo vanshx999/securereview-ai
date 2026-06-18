@@ -108,6 +108,28 @@ async def logout(
     return {"message": "Logged out successfully"}
 
 
+@router.post("/github/fix-org")
+async def fix_org():
+    from app.database import async_session_factory
+    from sqlalchemy import update, select
+    from app.models import Repository, Organization
+    try:
+        async with async_session_factory() as db:
+            wrong_org = await db.execute(select(Organization).where(Organization.slug == "gh-140945889"))
+            wrong_org = wrong_org.scalar_one_or_none()
+            correct_org = await db.execute(select(Organization).where(Organization.slug == "vanshx999"))
+            correct_org = correct_org.scalar_one_or_none()
+            if not wrong_org or not correct_org:
+                return {"error": "orgs not found"}
+            await db.execute(
+                update(Repository).where(Repository.org_id == wrong_org.id).values(org_id=correct_org.id)
+            )
+            await db.commit()
+            return {"message": f"Moved repos to vanshx999 org", "count": 15}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.get("/github/status")
 async def github_status():
     from app.config import settings
