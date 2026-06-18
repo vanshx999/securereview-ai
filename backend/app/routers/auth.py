@@ -160,7 +160,7 @@ async def github_status():
     try:
         async with async_session_factory() as db:
             from sqlalchemy import desc, func
-            from app.models import Organization
+            from app.models import Organization, PullRequest
             w = await db.execute(select(WebhookEvent).order_by(desc(WebhookEvent.created_at)).limit(10))
             recent_webhooks = [{"event": wh.event_type, "error": wh.error, "processed": wh.processed} for wh in w.scalars().all()]
             webhook_count = (await db.execute(select(func.count()).select_from(WebhookEvent))).scalar() or 0
