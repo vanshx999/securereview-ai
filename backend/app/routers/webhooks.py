@@ -180,6 +180,7 @@ async def github_webhook(
                                 Integration.org_id == repo.org_id,
                                 Integration.provider == "github",
                                 Integration.is_active == True,
+                                Integration.config['installation_id'].isnot(None),
                             ).order_by(Integration.created_at.desc())
                         )).scalars().first()
                         if integration:

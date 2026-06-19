@@ -198,7 +198,7 @@ async def github_status():
 
     int_details = []
     try:
-        ints = await db.execute(select(Integration).where(Integration.provider == "github", Integration.is_active == True))
+        ints = await db.execute(select(Integration).where(Integration.provider == "github", Integration.is_active == True, Integration.config['installation_id'].isnot(None)))
         for integ in ints.scalars().all():
             install_id = None
             has_config = bool(integ.config)
@@ -341,6 +341,7 @@ async def github_callback(
         provider="github",
         access_token=access_token,
         config={"login": github_user["login"]},
+        is_active=False,
     )
     db.add(integ)
     await db.flush()
