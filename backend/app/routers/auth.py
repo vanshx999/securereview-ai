@@ -220,6 +220,7 @@ async def github_status():
         "webhook_secret_preview": (settings.GITHUB_WEBHOOK_SECRET or "")[:8] + "...",
         "frontend_url": settings.FRONTEND_URL,
         "app_url": settings.APP_URL,
+        "github_app_id": settings.GITHUB_APP_ID,
         "github_app_id_set": bool(settings.GITHUB_APP_ID),
         "github_app_key_set": bool(settings.GITHUB_APP_PRIVATE_KEY),
         "github_key_preview": (settings.GITHUB_APP_PRIVATE_KEY or "")[:30] + "...",
