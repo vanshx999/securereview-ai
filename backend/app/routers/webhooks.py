@@ -174,23 +174,17 @@ async def github_webhook(
                             install_id = None
                             if integration.config:
                                 install_id = integration.config.get("installation_id")
-                            token = None
                             if install_id:
                                 try:
                                     token = await get_installation_access_token(int(install_id))
-                                except Exception as exc:
-                                    logger.warning("token_gen_failed: %s", exc)
-                            if not token and integration.access_token:
-                                token = integration.access_token
-                            if token:
-                                try:
-                                    async with httpx.AsyncClient() as client:
-                                        resp = await client.get(
-                                            diff_url,
-                                            headers={"Authorization": f"Bearer {token}"},
-                                        )
-                                        if resp.status_code == 200:
-                                            diff_data = resp.text
+                                    if token:
+                                        async with httpx.AsyncClient() as client:
+                                            resp = await client.get(
+                                                diff_url,
+                                                headers={"Authorization": f"Bearer {token}"},
+                                            )
+                                            if resp.status_code == 200:
+                                                diff_data = resp.text
                                 except Exception as exc:
                                     logger.warning("diff_fetch_failed: %s", exc)
 

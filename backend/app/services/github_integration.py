@@ -13,13 +13,14 @@ from jose import jwt
 async def get_installation_access_token(installation_id: int) -> Optional[str]:
     if not settings.GITHUB_APP_ID or not settings.GITHUB_APP_PRIVATE_KEY:
         return None
+    private_key = settings.GITHUB_APP_PRIVATE_KEY.replace("\\n", "\n")
     now = int(time.time())
     payload = {
         "iat": now - 60,
         "exp": now + 600,
         "iss": str(settings.GITHUB_APP_ID),
     }
-    token = jwt.encode(payload, settings.GITHUB_APP_PRIVATE_KEY, algorithm="RS256")
+    token = jwt.encode(payload, private_key, algorithm="RS256")
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"https://api.github.com/app/installations/{installation_id}/access_tokens",
