@@ -300,6 +300,35 @@ async def debug_analyze(pr_number: int):
         return {"error": str(e), "traceback": traceback.format_exc()}
 
 
+@router.post("/github/debug-call-analyze-pr/{pr_number}")
+async def debug_call_analyze_pr(pr_number: int):
+    from app.database import async_session_factory
+    from app.models import PullRequest
+    from app.tasks import _run_full_pipeline, analyze_pr
+    from sqlalchemy import select
+    try:
+        async with async_session_factory() as db:
+            pr = (await db.execute(select(PullRequest).where(PullRequest.pr_number == pr_number).order_by(PullRequest.created_at.desc()))).scalars().first()
+            if not pr:
+                return {"error": "PR not found"}
+        await analyze_pr(pr.id)
+        async with async_session_factory() as db:
+            pr = (await db.execute(select(PullRequest).where(PullRequest.pr_number == pr_number).order_by(PullRequest.created_at.desc()))).scalars().first()
+            from app.models import Finding
+            findings = await db.execute(select(Finding).where(Finding.pr_id == pr.id))
+            all_findings = findings.scalars().all()
+            return {
+                "pr_total_findings": pr.total_findings,
+                "pr_critical_findings": pr.critical_findings,
+                "pr_health_score": pr.health_score,
+                "findings_in_db": len(all_findings),
+                "finding_details": [{"title": f.title, "severity": str(f.severity)} for f in all_findings],
+            }
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "traceback": traceback.format_exc()}
+
+
 @router.get("/github/authorize-url")
 async def github_authorize_url():
     from app.config import settings
