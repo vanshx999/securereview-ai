@@ -41,9 +41,9 @@ async def get_installation_access_token(installation_id: int) -> Optional[str]:
             return auth.token
     except Exception as exc:
         import logging
-        token_err = str(exc)[:300]
-        logging.getLogger(__name__).warning("pygithub_token_failed: %s", token_err)
-        raise  # Re-raise so webhook catches the actual error
+        msg = str(exc)[:500]
+        logging.getLogger(__name__).warning("pygithub_token_failed: %s", msg)
+        raise Exception(f"github_api: {msg}") from exc
 
 SEVERITY_EMOJI = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}
 SEVERITY_LABEL = {"CRITICAL": "CRITICAL", "HIGH": "HIGH", "MEDIUM": "MEDIUM", "LOW": "LOW"}
