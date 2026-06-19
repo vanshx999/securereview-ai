@@ -146,17 +146,23 @@ async def analyze_pr(pr_id: str):
                 await db.flush()
 
                 if finding_data.get("policy_id"):
-                    from app.models import PolicyViolation
-                    violation = PolicyViolation(
-                        finding_id=finding.id,
-                        policy_id=finding_data["policy_id"],
-                        matched_text=finding_data.get("code_snippet", "")[:500],
-                    )
-                    db.add(violation)
+                    try:
+                        from app.models import PolicyViolation
+                        violation = PolicyViolation(
+                            finding_id=finding.id,
+                            policy_id=finding_data["policy_id"],
+                            matched_text=finding_data.get("code_snippet", "")[:500],
+                        )
+                        db.add(violation)
+                    except Exception:
+                        pass
 
                 if finding.severity.value == "CRITICAL":
-                    from app.services.notifications import notify_critical_finding
-                    await notify_critical_finding(db, repo.org_id, finding, repo.full_name, pr.pr_number)
+                    try:
+                        from app.services.notifications import notify_critical_finding
+                        await notify_critical_finding(db, repo.org_id, finding, repo.full_name, pr.pr_number)
+                    except Exception:
+                        pass
 
             summary = pipeline_result.get("summary", {})
             severity_counts = summary.get("severity_counts", {})
@@ -169,12 +175,15 @@ async def analyze_pr(pr_id: str):
             pr.health_score = max(0, 100 - (critical_findings * 20 + (total_findings - critical_findings) * 2))
             await db.commit()
 
-            from app.services.github_integration import post_pr_review_comment
-            findings_result = await db.execute(
-                select(Finding).where(Finding.pr_id == pr.id, Finding.status == FindingStatus.OPEN)
-            )
-            db_findings = findings_result.scalars().all()
-            await post_pr_review_comment(db, pr.repo_id, pr.pr_number, db_findings, repo.org_id)
+            try:
+                from app.services.github_integration import post_pr_review_comment
+                findings_result = await db.execute(
+                    select(Finding).where(Finding.pr_id == pr.id, Finding.status == FindingStatus.OPEN)
+                )
+                db_findings = findings_result.scalars().all()
+                await post_pr_review_comment(db, pr.repo_id, pr.pr_number, db_findings, repo.org_id)
+            except Exception:
+                pass
     except Exception as exc:
         import logging
         logging.getLogger(__name__).exception("analyze_pr_failed: pr_id=%s error=%s", pr_id, exc)
