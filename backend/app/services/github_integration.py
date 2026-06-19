@@ -7,29 +7,31 @@ from sqlalchemy import select
 from app.config import settings
 from app.models import Repository, PullRequest, Finding, Integration
 import httpx
-from jose import jwt
 
 
 async def get_installation_access_token(installation_id: int) -> Optional[str]:
     if not settings.GITHUB_APP_ID or not settings.GITHUB_APP_PRIVATE_KEY:
         return None
-    import base64, time
+    import base64
     raw = settings.GITHUB_APP_PRIVATE_KEY.strip()
-    if not raw.startswith("-----") and not raw.startswith("MII"):
+    if not raw.startswith("-----"):
         try:
             raw = base64.b64decode(raw).decode("utf-8")
         except Exception:
             pass
-    for seq in ["\\n", "\\r", "`"]:
-        if seq in raw:
-            raw = raw.replace(seq, "\n")
-    raw = raw.replace("\r", "")
-    raw = "\n".join(line.strip() for line in raw.split("\n") if line.strip())
-    if "BEGIN RSA PRIVATE KEY" not in raw:
-        raw = "-----BEGIN RSA PRIVATE KEY-----\n" + raw
-    if "END RSA PRIVATE KEY" not in raw:
-        raw = raw.strip() + "\n-----END RSA PRIVATE KEY-----"
+    raw = raw.replace("\\n", "\n").replace("\\r", "\r").strip()
     try:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.backends import default_backend
+        key_bytes = raw.encode("utf-8") if isinstance(raw, str) else raw
+        private_key = serialization.load_pem_private_key(
+            key_bytes, password=None, backend=default_backend()
+        )
+        clean_pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        ).decode("utf-8")
         from jose import jwt
         now = int(time.time())
         payload = {
@@ -37,7 +39,7 @@ async def get_installation_access_token(installation_id: int) -> Optional[str]:
             "exp": now + 600,
             "iss": str(settings.GITHUB_APP_ID),
         }
-        jose_token = jwt.encode(payload, raw, algorithm="RS256")
+        jose_token = jwt.encode(payload, clean_pem, algorithm="RS256")
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"https://api.github.com/app/installations/{installation_id}/access_tokens",
