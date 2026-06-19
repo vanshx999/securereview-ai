@@ -13,16 +13,21 @@ from jose import jwt
 async def get_installation_access_token(installation_id: int) -> Optional[str]:
     if not settings.GITHUB_APP_ID or not settings.GITHUB_APP_PRIVATE_KEY:
         return None
-    import tempfile, os
+    import tempfile, os, base64
     raw = settings.GITHUB_APP_PRIVATE_KEY.strip()
+    if not raw.startswith("-----") and not raw.startswith("MII"):
+        try:
+            raw = base64.b64decode(raw).decode("utf-8")
+        except Exception:
+            pass
     for seq in ["\\n", "\\r", "`"]:
         if seq in raw:
             raw = raw.replace(seq, "\n")
     raw = raw.replace("\r", "")
     raw = "\n".join(line.strip() for line in raw.split("\n") if line.strip())
-    if not raw.startswith("-----"):
+    if "BEGIN RSA PRIVATE KEY" not in raw:
         raw = "-----BEGIN RSA PRIVATE KEY-----\n" + raw
-    if not raw.strip().endswith("-----"):
+    if "END RSA PRIVATE KEY" not in raw:
         raw = raw.strip() + "\n-----END RSA PRIVATE KEY-----"
     try:
         from github import GithubIntegration
