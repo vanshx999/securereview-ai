@@ -76,6 +76,17 @@ async def github_webhook(
                     )
                     db.add(integration)
 
+                    old = await db.execute(
+                        select(Integration).where(
+                            Integration.org_id == org.id,
+                            Integration.provider == "github",
+                            Integration.id != integration.id,
+                            Integration.is_active == True,
+                        )
+                    )
+                    for o in old.scalars().all():
+                        o.is_active = False
+
                     for repo_data in repos:
                         existing = await db.execute(
                             select(Repository).where(Repository.github_repo_id == repo_data["id"])
@@ -168,7 +179,7 @@ async def github_webhook(
                                 Integration.org_id == repo.org_id,
                                 Integration.provider == "github",
                                 Integration.is_active == True,
-                            )
+                            ).order_by(Integration.created_at.desc())
                         )).scalars().first()
                         if integration:
                             install_id = None
