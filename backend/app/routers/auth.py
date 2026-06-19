@@ -241,6 +241,34 @@ async def github_status():
     }
 
 
+@router.get("/github/debug-pr/{pr_number}")
+async def debug_pr(pr_number: int):
+    from app.database import async_session_factory
+    from app.models import PullRequest
+    from sqlalchemy import select
+    try:
+        async with async_session_factory() as db:
+            pr = (await db.execute(select(PullRequest).where(PullRequest.pr_number == pr_number).order_by(PullRequest.created_at.desc()))).scalars().first()
+            if not pr:
+                return {"error": "PR not found"}
+            diff_preview = (pr.diff_data or "")[:2000]
+            diff_lines = (pr.diff_data or "").split("\n")[:20]
+            from app.services.secret_detection import scan_diff_for_patterns
+            findings = await scan_diff_for_patterns(pr.diff_data or "")
+            return {
+                "pr_number": pr.pr_number,
+                "repo_id": pr.repo_id,
+                "diff_len": len(pr.diff_data or ""),
+                "has_diff": bool(pr.diff_data),
+                "diff_preview": diff_preview,
+                "diff_lines": diff_lines,
+                "total_findings": len(findings),
+                "findings": [{"title": f["title"], "severity": f["severity"], "line": f["line_number"], "code": f["code_snippet"][:80]} for f in findings],
+            }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.get("/github/authorize-url")
 async def github_authorize_url():
     from app.config import settings
