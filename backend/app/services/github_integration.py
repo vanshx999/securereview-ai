@@ -20,6 +20,10 @@ async def get_installation_access_token(installation_id: int) -> Optional[str]:
             raw = raw.replace(seq, "\n")
     raw = raw.replace("\r", "")
     raw = "\n".join(line.strip() for line in raw.split("\n") if line.strip())
+    if not raw.startswith("-----"):
+        raw = "-----BEGIN RSA PRIVATE KEY-----\n" + raw
+    if not raw.strip().endswith("-----"):
+        raw = raw.strip() + "\n-----END RSA PRIVATE KEY-----"
     try:
         from github import GithubIntegration
         import asyncio
