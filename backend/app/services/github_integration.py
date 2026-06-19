@@ -300,6 +300,7 @@ async def get_github_pr_diff(repo_full_name: str, pr_number: int, access_token: 
             resp = await client.get(
                 f"https://api.github.com/repos/{repo_full_name}/pulls/{pr_number}",
                 headers=headers,
+                follow_redirects=True,
             )
             if resp.status_code == 200:
                 return resp.text

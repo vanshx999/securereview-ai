@@ -194,7 +194,11 @@ async def github_webhook(
                                         async with httpx.AsyncClient() as client:
                                             resp = await client.get(
                                                 diff_url,
-                                                headers={"Authorization": f"Bearer {token}"},
+                                                headers={
+                                                    "Authorization": f"Bearer {token}",
+                                                    "Accept": "application/vnd.github.v3.diff",
+                                                },
+                                                follow_redirects=True,
                                             )
                                             if resp.status_code == 200:
                                                 diff_data = resp.text
@@ -220,7 +224,11 @@ async def github_webhook(
                                     async with httpx.AsyncClient() as client:
                                         resp = await client.get(
                                             diff_url,
-                                            headers={"Authorization": f"Bearer {oauth.access_token}"},
+                                            headers={
+                                                "Authorization": f"Bearer {oauth.access_token}",
+                                                "Accept": "application/vnd.github.v3.diff",
+                                            },
+                                            follow_redirects=True,
                                         )
                                         if resp.status_code == 200:
                                             diff_data = resp.text
