@@ -14,9 +14,12 @@ async def _run_full_pipeline(
     org_id: Optional[str],
     db_session_factory,
 ) -> dict:
+    import logging
+    logger = logging.getLogger(__name__)
     all_findings = []
 
     secret_findings = await scan_diff_for_patterns(diff_data)
+    logger.info("pipeline: PR #%s scan_diff_for_patterns found %d findings", pr_number, len(secret_findings))
     all_findings.extend(secret_findings)
 
     pipeline_result = await run_full_analysis_pipeline(
@@ -87,76 +90,91 @@ def _sort_by_severity(findings: list) -> list:
 
 
 async def analyze_pr(pr_id: str):
-    from app.database import async_session_factory
-    from app.models import PullRequest, Repository, Finding, FindingStatus
-    from sqlalchemy import select
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        from app.database import async_session_factory
+        from app.models import PullRequest, Repository, Finding, FindingStatus
+        from sqlalchemy import select
 
-    async with async_session_factory() as db:
-        result = await db.execute(select(PullRequest).where(PullRequest.id == pr_id))
-        pr = result.scalar_one_or_none()
-        if not pr or not pr.diff_data:
-            return
+        async with async_session_factory() as db:
+            result = await db.execute(select(PullRequest).where(PullRequest.id == pr_id))
+            pr = result.scalar_one_or_none()
+            if not pr or not pr.diff_data:
+                logger.warning("analyze_pr: PR %s not found or no diff_data", pr_id)
+                return
 
-        repo = await db.execute(select(Repository).where(Repository.id == pr.repo_id))
-        repo = repo.scalar_one_or_none()
-        if not repo:
-            return
+            repo = await db.execute(select(Repository).where(Repository.id == pr.repo_id))
+            repo = repo.scalar_one_or_none()
+            if not repo:
+                logger.warning("analyze_pr: repo not found for PR %s", pr_id)
+                return
 
-        pipeline_result = await _run_full_pipeline(
-            diff_data=pr.diff_data,
-            repo_name=repo.full_name,
-            pr_number=pr.pr_number,
-            pr_title=pr.title or "",
-            org_id=repo.org_id,
-            db_session_factory=async_session_factory,
-        )
-
-        for finding_data in pipeline_result["findings"]:
-            finding = Finding(
-                pr_id=pr.id,
-                repo_id=pr.repo_id,
-                file_path=str(finding_data.get("file_path", "unknown")),
-                line_start=finding_data.get("line_number") or finding_data.get("line_start"),
-                line_end=finding_data.get("line_end") or finding_data.get("line_number") or finding_data.get("line_start"),
-                severity=finding_data.get("severity", "MEDIUM"),
-                category=finding_data.get("category", "unknown"),
-                title=str(finding_data.get("title", "Security finding"))[:255],
-                description=finding_data.get("description"),
-                code_snippet=finding_data.get("code_snippet"),
-                suggested_fix=finding_data.get("suggested_fix"),
-                is_ai_generated=finding_data.get("is_ai_generated", False),
-                metadata={
-                    "cwe_id": finding_data.get("cwe_id", ""),
-                    "policy_id": finding_data.get("policy_id"),
-                    "source": finding_data.get("source", "auto"),
-                },
+            pipeline_result = await _run_full_pipeline(
+                diff_data=pr.diff_data,
+                repo_name=repo.full_name,
+                pr_number=pr.pr_number,
+                pr_title=pr.title or "",
+                org_id=repo.org_id,
+                db_session_factory=async_session_factory,
             )
-            db.add(finding)
-            await db.flush()
 
-            if finding_data.get("policy_id"):
-                from app.models import PolicyViolation
-                violation = PolicyViolation(
-                    finding_id=finding.id,
-                    policy_id=finding_data["policy_id"],
-                    matched_text=finding_data.get("code_snippet", "")[:500],
+            findings_list = pipeline_result.get("findings", [])
+            logger.info("analyze_pr: PR #%s found %d findings", pr.pr_number, len(findings_list))
+
+            for finding_data in findings_list:
+                finding = Finding(
+                    pr_id=pr.id,
+                    repo_id=pr.repo_id,
+                    file_path=str(finding_data.get("file_path", "unknown")),
+                    line_start=finding_data.get("line_number") or finding_data.get("line_start"),
+                    line_end=finding_data.get("line_end") or finding_data.get("line_number") or finding_data.get("line_start"),
+                    severity=finding_data.get("severity", "MEDIUM"),
+                    category=finding_data.get("category", "unknown"),
+                    title=str(finding_data.get("title", "Security finding"))[:255],
+                    description=finding_data.get("description"),
+                    code_snippet=finding_data.get("code_snippet"),
+                    suggested_fix=finding_data.get("suggested_fix"),
+                    is_ai_generated=finding_data.get("is_ai_generated", False),
+                    metadata={
+                        "cwe_id": finding_data.get("cwe_id", ""),
+                        "policy_id": finding_data.get("policy_id"),
+                        "source": finding_data.get("source", "auto"),
+                    },
                 )
-                db.add(violation)
+                db.add(finding)
+                await db.flush()
 
-            if finding.severity.value == "CRITICAL":
-                from app.services.notifications import notify_critical_finding
-                await notify_critical_finding(db, repo.org_id, finding, repo.full_name, pr.pr_number)
+                if finding_data.get("policy_id"):
+                    from app.models import PolicyViolation
+                    violation = PolicyViolation(
+                        finding_id=finding.id,
+                        policy_id=finding_data["policy_id"],
+                        matched_text=finding_data.get("code_snippet", "")[:500],
+                    )
+                    db.add(violation)
 
-        summary = pipeline_result["summary"]
-        pr.ai_code_percentage = pipeline_result.get("ai_generated", {}).get("ai_percentage", 0.0)
-        pr.total_findings = summary.get("total_findings", len(pipeline_result["findings"]))
-        pr.critical_findings = summary.get("severity_counts", {}).get("CRITICAL", 0)
-        pr.health_score = max(0, 100 - (pr.critical_findings * 20 + (pr.total_findings - pr.critical_findings) * 2))
-        await db.commit()
+                if finding.severity.value == "CRITICAL":
+                    from app.services.notifications import notify_critical_finding
+                    await notify_critical_finding(db, repo.org_id, finding, repo.full_name, pr.pr_number)
 
-        from app.services.github_integration import post_pr_review_comment
-        findings_result = await db.execute(
-            select(Finding).where(Finding.pr_id == pr.id, Finding.status == FindingStatus.OPEN)
-        )
-        db_findings = findings_result.scalars().all()
-        await post_pr_review_comment(db, pr.repo_id, pr.pr_number, db_findings, repo.org_id)
+            summary = pipeline_result.get("summary", {})
+            severity_counts = summary.get("severity_counts", {})
+            total_findings = len(findings_list)
+            critical_findings = severity_counts.get("CRITICAL", 0)
+
+            pr.ai_code_percentage = pipeline_result.get("ai_generated", {}).get("ai_percentage", 0.0)
+            pr.total_findings = total_findings
+            pr.critical_findings = critical_findings
+            pr.health_score = max(0, 100 - (critical_findings * 20 + (total_findings - critical_findings) * 2))
+            await db.commit()
+
+            from app.services.github_integration import post_pr_review_comment
+            findings_result = await db.execute(
+                select(Finding).where(Finding.pr_id == pr.id, Finding.status == FindingStatus.OPEN)
+            )
+            db_findings = findings_result.scalars().all()
+            await post_pr_review_comment(db, pr.repo_id, pr.pr_number, db_findings, repo.org_id)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).exception("analyze_pr_failed: pr_id=%s error=%s", pr_id, exc)
