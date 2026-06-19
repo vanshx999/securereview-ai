@@ -75,6 +75,7 @@ async def github_webhook(
                         config={"installation_id": installation.get("id"), "account": gh_account.get("login")},
                     )
                     db.add(integration)
+                    await db.flush()
 
                     old = await db.execute(
                         select(Integration).where(

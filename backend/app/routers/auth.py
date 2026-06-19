@@ -196,6 +196,23 @@ async def github_status():
     except Exception as e:
         return {"error": str(e)}
 
+    int_details = []
+    try:
+        ints = await db.execute(select(Integration).where(Integration.provider == "github", Integration.is_active == True))
+        for integ in ints.scalars().all():
+            install_id = None
+            has_config = bool(integ.config)
+            if integ.config:
+                install_id = integ.config.get("installation_id")
+            int_details.append({
+                "id": integ.id[:8],
+                "org_id": integ.org_id[:8],
+                "has_config": has_config,
+                "has_install_id": bool(install_id),
+            })
+    except Exception:
+        pass
+
     return {
         "client_id": settings.GITHUB_CLIENT_ID,
         "client_secret_set": bool(settings.GITHUB_CLIENT_SECRET),
@@ -207,7 +224,8 @@ async def github_status():
         "github_app_key_set": bool(settings.GITHUB_APP_PRIVATE_KEY),
         "webhooks_received": webhook_count,
         "recent_webhooks": recent_webhooks,
-        "integrations": integration_count,
+        "integrations_total": integration_count,
+        "integrations_active": int_details,
         "repos_in_db": repo_count,
         "prs_in_db": pr_count,
         "recent_prs": recent_prs,
