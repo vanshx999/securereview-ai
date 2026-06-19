@@ -269,6 +269,37 @@ async def debug_pr(pr_number: int):
         return {"error": str(e)}
 
 
+@router.post("/github/debug-analyze/{pr_number}")
+async def debug_analyze(pr_number: int):
+    from app.database import async_session_factory
+    from app.models import PullRequest, Repository
+    from app.tasks import _run_full_pipeline
+    from sqlalchemy import select
+    try:
+        async with async_session_factory() as db:
+            pr = (await db.execute(select(PullRequest).where(PullRequest.pr_number == pr_number).order_by(PullRequest.created_at.desc()))).scalars().first()
+            if not pr or not pr.diff_data:
+                return {"error": "PR not found or no diff"}
+            repo = (await db.execute(select(Repository).where(Repository.id == pr.repo_id))).scalar_one_or_none()
+            result = await _run_full_pipeline(
+                diff_data=pr.diff_data,
+                repo_name=repo.full_name if repo else "unknown",
+                pr_number=pr.pr_number,
+                pr_title=pr.title or "",
+                org_id=repo.org_id if repo else None,
+                db_session_factory=async_session_factory,
+            )
+            return {
+                "total_findings": len(result.get("findings", [])),
+                "source": result.get("source", {}),
+                "findings": [{"title": f["title"], "severity": f["severity"], "category": f.get("category")} for f in result.get("findings", [])],
+                "summary": result.get("summary", {}),
+            }
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "traceback": traceback.format_exc()}
+
+
 @router.get("/github/authorize-url")
 async def github_authorize_url():
     from app.config import settings
