@@ -13,7 +13,7 @@ from jose import jwt
 async def get_installation_access_token(installation_id: int) -> Optional[str]:
     if not settings.GITHUB_APP_ID or not settings.GITHUB_APP_PRIVATE_KEY:
         return None
-    import tempfile, os, base64
+    import base64, time
     raw = settings.GITHUB_APP_PRIVATE_KEY.strip()
     if not raw.startswith("-----") and not raw.startswith("MII"):
         try:
@@ -30,25 +30,33 @@ async def get_installation_access_token(installation_id: int) -> Optional[str]:
     if "END RSA PRIVATE KEY" not in raw:
         raw = raw.strip() + "\n-----END RSA PRIVATE KEY-----"
     try:
-        from github import GithubIntegration, GithubException
-        import asyncio
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as f:
-            f.write(raw)
-            f.flush()
-            integration = GithubIntegration(int(settings.GITHUB_APP_ID), f.name)
-            auth = await asyncio.to_thread(integration.get_access_token, installation_id)
-            os.unlink(f.name)
-            return auth.token
-    except GithubException as exc:
-        import logging
-        msg = f"github_api_status_{exc.status}: {exc.data}"
-        logging.getLogger(__name__).warning("pygithub_token_failed: %s", msg)
-        raise Exception(msg) from exc
+        from jose import jwt
+        now = int(time.time())
+        payload = {
+            "iat": now - 60,
+            "exp": now + 600,
+            "iss": str(settings.GITHUB_APP_ID),
+        }
+        jose_token = jwt.encode(payload, raw, algorithm="RS256")
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"https://api.github.com/app/installations/{installation_id}/access_tokens",
+                headers={
+                    "Authorization": f"Bearer {jose_token}",
+                    "Accept": "application/vnd.github.v3+json",
+                },
+            )
+            if resp.status_code == 201:
+                data = resp.json()
+                return data.get("token")
+            else:
+                body = resp.text[:300]
+                raise Exception(f"github_status_{resp.status_code}: {body}")
     except Exception as exc:
         import logging
         msg = str(exc)[:500]
-        logging.getLogger(__name__).warning("pygithub_token_failed: %s", msg)
-        raise Exception(f"pem_error: {msg}") from exc
+        logging.getLogger(__name__).warning("token_failed: %s", msg)
+        raise Exception(f"token_error: {msg}") from exc
 
 SEVERITY_EMOJI = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}
 SEVERITY_LABEL = {"CRITICAL": "CRITICAL", "HIGH": "HIGH", "MEDIUM": "MEDIUM", "LOW": "LOW"}
