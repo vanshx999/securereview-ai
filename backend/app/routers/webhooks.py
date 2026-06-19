@@ -203,12 +203,29 @@ async def github_webhook(
                                     else:
                                         webhook_event.error = "token_was_none"
                                 except Exception as exc:
-                                    webhook_event.error = f"diff_exc: {str(exc)[:200]}"
+                                    webhook_event.error = f"token_exc: {str(exc)[:200]}"
                                     logger.warning("diff_fetch_failed: %s", exc)
-                            else:
-                                webhook_event.error = "no_install_id_in_config"
-                        else:
-                            webhook_event.error = "no_integration_found"
+
+                        if not diff_data:
+                            oauth = (await db.execute(
+                                select(Integration).where(
+                                    Integration.org_id == repo.org_id,
+                                    Integration.provider == "github",
+                                    Integration.access_token.isnot(None),
+                                    ~Integration.access_token.like("https://%"),
+                                ).order_by(Integration.created_at.desc())
+                            )).scalars().first()
+                            if oauth and oauth.access_token:
+                                try:
+                                    async with httpx.AsyncClient() as client:
+                                        resp = await client.get(
+                                            diff_url,
+                                            headers={"Authorization": f"Bearer {oauth.access_token}"},
+                                        )
+                                        if resp.status_code == 200:
+                                            diff_data = resp.text
+                                except Exception:
+                                    pass
 
                     pr = (await db.execute(
                         select(PullRequest).where(
