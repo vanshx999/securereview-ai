@@ -153,7 +153,7 @@ async def github_webhook(
 
                 repo = (await db.execute(
                     select(Repository).where(Repository.github_repo_id == gh_repo_id)
-                )).scalar_one_or_none()
+                )).scalars().first()
 
                 if not repo or not repo.is_active:
                     webhook_event.error = "Repository not found or inactive"
@@ -163,14 +163,13 @@ async def github_webhook(
                     diff_data = None
 
                     if diff_url:
-                        integration_recs = await db.execute(
+                        integration = (await db.execute(
                             select(Integration).where(
                                 Integration.org_id == repo.org_id,
                                 Integration.provider == "github",
                                 Integration.is_active == True,
                             )
-                        )
-                        integration = integration_recs.scalar_one_or_none()
+                        )).scalars().first()
                         if integration:
                             install_id = None
                             if integration.config:
