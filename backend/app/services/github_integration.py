@@ -14,9 +14,10 @@ async def get_installation_access_token(installation_id: int) -> Optional[str]:
     if not settings.GITHUB_APP_ID or not settings.GITHUB_APP_PRIVATE_KEY:
         return None
     raw = settings.GITHUB_APP_PRIVATE_KEY.strip()
-    for seq in ["\\n", "`"]:
+    for seq in ["\\n", "\\r", "`"]:
         if seq in raw:
             raw = raw.replace(seq, "\n")
+    raw = raw.replace("\r", "")
     raw = "\n".join(line.strip() for line in raw.split("\n") if line.strip())
     private_key = raw
     now = int(time.time())
