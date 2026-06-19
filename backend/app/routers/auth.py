@@ -179,6 +179,20 @@ async def github_status():
                 pr_count = pr_count_result.scalar() or 0
             except Exception as e:
                 pr_count = -1
+
+            recent_prs = []
+            try:
+                pr_rows = await db.execute(select(PullRequest).order_by(desc(PullRequest.created_at)).limit(5))
+                for pr in pr_rows.scalars().all():
+                    recent_prs.append({
+                        "pr_number": pr.pr_number,
+                        "has_diff": bool(pr.diff_data),
+                        "diff_len": len(pr.diff_data or ""),
+                        "total_findings": pr.total_findings,
+                        "health_score": pr.health_score or 0,
+                    })
+            except Exception:
+                pass
     except Exception as e:
         return {"error": str(e)}
 
@@ -189,11 +203,14 @@ async def github_status():
         "webhook_secret_preview": (settings.GITHUB_WEBHOOK_SECRET or "")[:8] + "...",
         "frontend_url": settings.FRONTEND_URL,
         "app_url": settings.APP_URL,
+        "github_app_id_set": bool(settings.GITHUB_APP_ID),
+        "github_app_key_set": bool(settings.GITHUB_APP_PRIVATE_KEY),
         "webhooks_received": webhook_count,
         "recent_webhooks": recent_webhooks,
         "integrations": integration_count,
         "repos_in_db": repo_count,
         "prs_in_db": pr_count,
+        "recent_prs": recent_prs,
         "orgs": org_details,
         "repos": repo_details,
     }
