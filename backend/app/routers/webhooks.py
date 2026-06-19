@@ -46,7 +46,7 @@ async def github_webhook(
         elif event == "installation":
             action = payload.get("action")
             installation = payload.get("installation", {})
-            gh_account = payload.get("account", {}) or {}
+            gh_account = installation.get("account", {}) or {}
             repos = payload.get("repositories", [])
             if action == "created":
                 integration_result = await db.execute(
