@@ -185,8 +185,17 @@ async def github_webhook(
                                             )
                                             if resp.status_code == 200:
                                                 diff_data = resp.text
+                                            else:
+                                                webhook_event.error = f"diff_fetch_status_{resp.status_code}"
+                                    else:
+                                        webhook_event.error = "token_was_none"
                                 except Exception as exc:
+                                    webhook_event.error = f"diff_exc: {str(exc)[:200]}"
                                     logger.warning("diff_fetch_failed: %s", exc)
+                            else:
+                                webhook_event.error = "no_install_id_in_config"
+                        else:
+                            webhook_event.error = "no_integration_found"
 
                     pr = (await db.execute(
                         select(PullRequest).where(
