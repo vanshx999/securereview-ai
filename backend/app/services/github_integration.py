@@ -30,7 +30,7 @@ async def get_installation_access_token(installation_id: int) -> Optional[str]:
     if "END RSA PRIVATE KEY" not in raw:
         raw = raw.strip() + "\n-----END RSA PRIVATE KEY-----"
     try:
-        from github import GithubIntegration
+        from github import GithubIntegration, GithubException
         import asyncio
         with tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as f:
             f.write(raw)
@@ -39,11 +39,16 @@ async def get_installation_access_token(installation_id: int) -> Optional[str]:
             auth = await asyncio.to_thread(integration.get_access_token, installation_id)
             os.unlink(f.name)
             return auth.token
+    except GithubException as exc:
+        import logging
+        msg = f"github_api_status_{exc.status}: {exc.data}"
+        logging.getLogger(__name__).warning("pygithub_token_failed: %s", msg)
+        raise Exception(msg) from exc
     except Exception as exc:
         import logging
         msg = str(exc)[:500]
         logging.getLogger(__name__).warning("pygithub_token_failed: %s", msg)
-        raise Exception(f"github_api: {msg}") from exc
+        raise Exception(f"pem_error: {msg}") from exc
 
 SEVERITY_EMOJI = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}
 SEVERITY_LABEL = {"CRITICAL": "CRITICAL", "HIGH": "HIGH", "MEDIUM": "MEDIUM", "LOW": "LOW"}
