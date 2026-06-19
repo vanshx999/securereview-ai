@@ -13,31 +13,26 @@ from jose import jwt
 async def get_installation_access_token(installation_id: int) -> Optional[str]:
     if not settings.GITHUB_APP_ID or not settings.GITHUB_APP_PRIVATE_KEY:
         return None
+    import tempfile, os
     raw = settings.GITHUB_APP_PRIVATE_KEY.strip()
     for seq in ["\\n", "\\r", "`"]:
         if seq in raw:
             raw = raw.replace(seq, "\n")
     raw = raw.replace("\r", "")
     raw = "\n".join(line.strip() for line in raw.split("\n") if line.strip())
-    private_key = raw
-    now = int(time.time())
-    payload = {
-        "iat": now - 60,
-        "exp": now + 600,
-        "iss": str(settings.GITHUB_APP_ID),
-    }
-    token = jwt.encode(payload, private_key, algorithm="RS256")
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"https://api.github.com/app/installations/{installation_id}/access_tokens",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/vnd.github.v3+json",
-            },
-        )
-        if resp.status_code == 201:
-            data = resp.json()
-            return data.get("token")
+    try:
+        from github import GithubIntegration
+        import asyncio
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as f:
+            f.write(raw)
+            f.flush()
+            integration = GithubIntegration(int(settings.GITHUB_APP_ID), f.name)
+            auth = await asyncio.to_thread(integration.get_access_token, installation_id)
+            os.unlink(f.name)
+            return auth.token
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("pygithub_token_failed: %s", exc)
     return None
 
 SEVERITY_EMOJI = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}
