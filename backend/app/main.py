@@ -4,7 +4,6 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import init_db
-from app.middleware.rate_limit import check_rate_limit
 
 from app.routers import (
     auth, orgs, repositories, pr_review, findings, policies,
@@ -39,15 +38,7 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def add_rate_limit_middleware(request: Request, call_next):
-    if not request.url.path.startswith("/webhooks/"):
-        try:
-            await check_rate_limit(request)
-        except Exception:
-            pass
-    response = await call_next(request)
-    return response
+
 
 
 app.include_router(auth.router)
