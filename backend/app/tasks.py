@@ -90,7 +90,7 @@ def _sort_by_severity(findings: list) -> list:
     return sorted(findings, key=lambda f: order.get(f.get("severity", "LOW"), 99))
 
 
-async def analyze_pr(pr_id: str):
+async def analyze_pr(pr_id: str, diff_data_override: Optional[str] = None):
     import logging
     logger = logging.getLogger(__name__)
     try:
@@ -104,12 +104,16 @@ async def analyze_pr(pr_id: str):
         async with async_session_factory() as db:
             result = await db.execute(select(PullRequest).where(PullRequest.id == pr_id))
             pr = result.scalar_one_or_none()
-            if not pr or not pr.diff_data:
-                logger.warning("analyze_pr: PR %s not found or no diff_data", pr_id)
+            if not pr:
+                logger.warning("analyze_pr: PR %s not found", pr_id)
                 return
 
-            diff_text = str(pr.diff_data)
-            logger.info("analyze_pr: PR %s diff_data type=%s len=%d", pr_id, type(pr.diff_data).__name__, len(diff_text))
+            diff_text = diff_data_override if diff_data_override is not None else pr.diff_data
+            if not diff_text:
+                logger.warning("analyze_pr: PR %s no diff_data", pr_id)
+                return
+            diff_text = str(diff_text)
+            logger.info("analyze_pr: PR %s diff_data type=%s len=%d override=%s", pr_id, type(diff_text).__name__, len(diff_text), bool(diff_data_override))
 
             repo = await db.execute(select(Repository).where(Repository.id == pr.repo_id))
             repo = repo.scalar_one_or_none()

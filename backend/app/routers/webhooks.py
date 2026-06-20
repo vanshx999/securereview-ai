@@ -264,9 +264,10 @@ async def github_webhook(
 
                     if diff_data:
                         try:
-                            await analyze_pr(pr.id)
+                            await analyze_pr(pr.id, diff_data)
                         except Exception as exc:
                             logger.exception("inline_analyze_failed: %s", exc)
+                            webhook_event.error = f"analyze_failed: {str(exc)[:200]}"
 
                     result_status = f"queued_pr_{pr_number}"
 
