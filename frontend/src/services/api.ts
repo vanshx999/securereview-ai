@@ -1,7 +1,9 @@
 import type { AuthTokens, User } from '../types';
 
 const _raw = import.meta.env.VITE_API_URL || '';
-const API_BASE = _raw ? `${_raw.replace(/\/+$/, '')}/api` : '/api';
+const API_BASE = _raw
+  ? `${_raw.replace(/\/+$/, '')}/api`
+  : 'https://securereview-ai-backend.onrender.com/api';
 
 async function request<T>(
   endpoint: string,
