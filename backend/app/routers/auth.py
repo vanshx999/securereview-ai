@@ -343,6 +343,39 @@ async def debug_call_analyze_pr(pr_number: int):
         return {"error": str(e), "traceback": traceback.format_exc()}
 
 
+@router.post("/github/debug-analyze-pr-direct/{pr_number}")
+async def debug_analyze_pr_direct(pr_number: int):
+    from app.database import async_session_factory
+    from app.models import PullRequest, Finding, FindingStatus
+    from app.tasks import analyze_pr
+    from sqlalchemy import select
+    from app.services.secret_detection import scan_diff_for_patterns
+    try:
+        async with async_session_factory() as db:
+            pr = (await db.execute(select(PullRequest).where(PullRequest.pr_number == pr_number).order_by(PullRequest.created_at.desc()))).scalars().first()
+            if not pr or not pr.diff_data:
+                return {"error": "PR not found or no diff"}
+            diff_data = pr.diff_data
+            pr_id = pr.id
+
+        direct = await scan_diff_for_patterns(diff_data)
+        await analyze_pr(pr_id, diff_data)
+
+        async with async_session_factory() as db:
+            pr2 = (await db.execute(select(PullRequest).where(PullRequest.id == pr_id))).scalar_one_or_none()
+            findings = await db.execute(select(Finding).where(Finding.pr_id == pr_id))
+            all_findings = findings.scalars().all()
+            return {
+                "direct_scan": len(direct),
+                "pr_total_after": pr2.total_findings if pr2 else None,
+                "findings_in_db": len(all_findings),
+                "finding_titles": [f.title for f in all_findings],
+            }
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "traceback": traceback.format_exc()}
+
+
 @router.get("/github/authorize-url")
 async def github_authorize_url():
     from app.config import settings
