@@ -263,7 +263,10 @@ async def github_webhook(
                     webhook_event.processed = True
 
                     if diff_data:
-                        asyncio.ensure_future(analyze_pr(pr.id))
+                        try:
+                            await analyze_pr(pr.id)
+                        except Exception as exc:
+                            logger.exception("inline_analyze_failed: %s", exc)
 
                     result_status = f"queued_pr_{pr_number}"
 
