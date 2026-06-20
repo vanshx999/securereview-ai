@@ -175,14 +175,14 @@ async def _build_trends(
 
     daily_findings_result = await db.execute(
         select(
-            func.date_trunc('day', Finding.created_at).label('date'),
+            func.date(Finding.created_at).label('date'),
             Finding.severity,
             func.count().label('count'),
         ).where(
             Finding.repo_id.in_(repo_ids),
             Finding.created_at >= start_date,
         ).group_by(
-            func.date_trunc('day', Finding.created_at),
+            func.date(Finding.created_at),
             Finding.severity,
         ).order_by('date')
     )
@@ -196,14 +196,14 @@ async def _build_trends(
 
     daily_prs_result = await db.execute(
         select(
-            func.date_trunc('day', PullRequest.created_at).label('date'),
+            func.date(PullRequest.created_at).label('date'),
             func.count().label('count'),
             func.avg(PullRequest.ai_code_percentage).label('avg_ai'),
         ).where(
             PullRequest.repo_id.in_(repo_ids),
             PullRequest.created_at >= start_date,
         ).group_by(
-            func.date_trunc('day', PullRequest.created_at),
+            func.date(PullRequest.created_at),
         ).order_by('date')
     )
 
