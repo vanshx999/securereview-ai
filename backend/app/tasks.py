@@ -97,6 +97,9 @@ async def analyze_pr(pr_id: str):
         from app.database import async_session_factory
         from app.models import PullRequest, Repository, Finding, FindingStatus
         from sqlalchemy import select
+        from app.services.secret_detection import scan_diff_for_patterns
+        from app.services.analysis import run_full_analysis_pipeline, parse_unified_diff
+        from app.services.policy_engine import check_policies_for_parsed_diff
 
         async with async_session_factory() as db:
             result = await db.execute(select(PullRequest).where(PullRequest.id == pr_id))
@@ -105,23 +108,51 @@ async def analyze_pr(pr_id: str):
                 logger.warning("analyze_pr: PR %s not found or no diff_data", pr_id)
                 return
 
+            diff_text = str(pr.diff_data)
+            logger.info("analyze_pr: PR %s diff_data type=%s len=%d", pr_id, type(pr.diff_data).__name__, len(diff_text))
+
             repo = await db.execute(select(Repository).where(Repository.id == pr.repo_id))
             repo = repo.scalar_one_or_none()
             if not repo:
                 logger.warning("analyze_pr: repo not found for PR %s", pr_id)
                 return
 
-            pipeline_result = await _run_full_pipeline(
-                diff_data=pr.diff_data,
+            all_findings = []
+            secret_findings = await scan_diff_for_patterns(diff_text)
+            logger.info("analyze_pr: secret scan found %d findings", len(secret_findings))
+            all_findings.extend(secret_findings)
+
+            pipeline_result = await run_full_analysis_pipeline(
+                diff_data=diff_text,
                 repo_name=repo.full_name,
                 pr_number=pr.pr_number,
                 pr_title=pr.title or "",
-                org_id=repo.org_id,
-                db_session_factory=async_session_factory,
             )
+            all_findings.extend(pipeline_result.get("findings", []))
 
-            findings_list = pipeline_result.get("findings", [])
-            logger.info("analyze_pr: PR #%s found %d findings", pr.pr_number, len(findings_list))
+            if repo.org_id:
+                try:
+                    async with async_session_factory() as policy_db:
+                        parsed = parse_unified_diff(diff_text)
+                        policy_findings = await check_policies_for_parsed_diff(policy_db, repo.org_id, parsed)
+                        all_findings.extend(policy_findings)
+                except Exception:
+                    pass
+
+            all_findings = _deduplicate(all_findings)
+            all_findings = _sort_by_severity(all_findings)
+            all_findings = all_findings[:20]
+
+            severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+            for f in all_findings:
+                sev = f.get("severity", "LOW")
+                if sev in severity_counts:
+                    severity_counts[sev] += 1
+
+            ai_info = pipeline_result.get("ai_generated", {})
+
+            findings_list = all_findings
+            logger.info("analyze_pr: PR #%s found %d total findings", pr.pr_number, len(findings_list))
 
             for finding_data in findings_list:
                 finding = Finding(
@@ -165,12 +196,10 @@ async def analyze_pr(pr_id: str):
                     except Exception:
                         pass
 
-            summary = pipeline_result.get("summary", {})
-            severity_counts = summary.get("severity_counts", {})
             total_findings = len(findings_list)
             critical_findings = severity_counts.get("CRITICAL", 0)
 
-            pr.ai_code_percentage = pipeline_result.get("ai_generated", {}).get("ai_percentage", 0.0)
+            pr.ai_code_percentage = ai_info.get("ai_percentage", 0.0)
             pr.total_findings = total_findings
             pr.critical_findings = critical_findings
             pr.health_score = max(0, 100 - (critical_findings * 20 + (total_findings - critical_findings) * 2))
