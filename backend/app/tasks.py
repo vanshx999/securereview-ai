@@ -16,6 +16,7 @@ async def _run_full_pipeline(
 ) -> dict:
     import logging
     logger = logging.getLogger(__name__)
+    logger.info("pipeline: PR #%s diff_data len=%d first_80=%s", pr_number, len(diff_data or ""), (diff_data or "")[:80])
     all_findings = []
 
     secret_findings = await scan_diff_for_patterns(diff_data)

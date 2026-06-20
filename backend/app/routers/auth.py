@@ -303,24 +303,38 @@ async def debug_analyze(pr_number: int):
 @router.post("/github/debug-call-analyze-pr/{pr_number}")
 async def debug_call_analyze_pr(pr_number: int):
     from app.database import async_session_factory
-    from app.models import PullRequest
+    from app.models import PullRequest, Finding, FindingStatus
     from app.tasks import _run_full_pipeline, analyze_pr
     from sqlalchemy import select
+    from app.services.secret_detection import scan_diff_for_patterns
+    import logging
+    logger = logging.getLogger(__name__)
     try:
         async with async_session_factory() as db:
             pr = (await db.execute(select(PullRequest).where(PullRequest.pr_number == pr_number).order_by(PullRequest.created_at.desc()))).scalars().first()
             if not pr:
                 return {"error": "PR not found"}
-        await analyze_pr(pr.id)
+            pr_id = pr.id
+            diff_len = len(pr.diff_data or "")
+            diff_preview = (pr.diff_data or "")[:200]
+            logger.info("debug_call_analyze: PR %s id=%s diff_len=%d", pr_number, pr_id, diff_len)
+
+            direct_findings = await scan_diff_for_patterns(pr.diff_data or "")
+            logger.info("debug_call_analyze: direct secret scan = %d findings", len(direct_findings))
+
+        await analyze_pr(pr_id)
+
         async with async_session_factory() as db:
             pr = (await db.execute(select(PullRequest).where(PullRequest.pr_number == pr_number).order_by(PullRequest.created_at.desc()))).scalars().first()
-            from app.models import Finding
             findings = await db.execute(select(Finding).where(Finding.pr_id == pr.id))
             all_findings = findings.scalars().all()
             return {
-                "pr_total_findings": pr.total_findings,
-                "pr_critical_findings": pr.critical_findings,
-                "pr_health_score": pr.health_score,
+                "pr_id_used": pr_id,
+                "diff_len_before": diff_len,
+                "diff_preview_start": diff_preview[:80],
+                "direct_scan_findings": len(direct_findings),
+                "direct_scan_titles": [f["title"] for f in direct_findings],
+                "pr_total_findings": pr.total_findings if pr else None,
                 "findings_in_db": len(all_findings),
                 "finding_details": [{"title": f.title, "severity": str(f.severity)} for f in all_findings],
             }
