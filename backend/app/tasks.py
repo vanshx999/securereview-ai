@@ -95,9 +95,9 @@ async def analyze_pr(pr_id: str, diff_data_override: Optional[str] = None):
     logger = logging.getLogger(__name__)
     from app.database import async_session_factory
     from app.models import PullRequest, Repository, Finding, FindingStatus
-    from app.models import FindingSeverity
     from sqlalchemy import select
     from app.services.secret_detection import scan_diff_for_patterns
+    from app.services.analysis import run_full_analysis_pipeline
 
     async with async_session_factory() as db:
         result = await db.execute(select(PullRequest).where(PullRequest.id == pr_id))
@@ -117,10 +117,30 @@ async def analyze_pr(pr_id: str, diff_data_override: Optional[str] = None):
             diff_text = ""
         diff_text = str(diff_text)
 
-        secret_findings = await scan_diff_for_patterns(diff_text)
-        logger.info("analyze_pr: secret scan found %d findings for PR %s", len(secret_findings), pr_id)
+        all_findings = []
 
-        for finding_data in secret_findings:
+        secret_findings = await scan_diff_for_patterns(diff_text)
+        logger.info("analyze_pr: secret scan found %d findings", len(secret_findings))
+        all_findings.extend(secret_findings)
+
+        pipeline_result = await run_full_analysis_pipeline(
+            diff_data=diff_text,
+            repo_name=repo.full_name,
+            pr_number=pr.pr_number,
+            pr_title=pr.title or "",
+        )
+        all_findings.extend(pipeline_result.get("findings", []))
+
+        all_findings = _deduplicate(all_findings)
+        all_findings = _sort_by_severity(all_findings)
+        all_findings = all_findings[:20]
+
+        severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+
+        for finding_data in all_findings:
+            severity_counts[finding_data.get("severity", "LOW")] = \
+                severity_counts.get(finding_data.get("severity", "LOW"), 0) + 1
+
             finding = Finding(
                 pr_id=pr.id,
                 repo_id=pr.repo_id,
@@ -141,13 +161,29 @@ async def analyze_pr(pr_id: str, diff_data_override: Optional[str] = None):
                 },
             )
             db.add(finding)
+            await db.flush()
 
-        total = len(secret_findings)
-        critical = sum(1 for f in secret_findings if f.get("severity") == "CRITICAL")
-        await db.flush()
+            try:
+                if finding.severity.value == "CRITICAL":
+                    from app.services.notifications import notify_critical_finding
+                    await notify_critical_finding(db, repo.org_id, finding, repo.full_name, pr.pr_number)
+            except Exception:
+                pass
 
+        total = len(all_findings)
+        critical = severity_counts.get("CRITICAL", 0)
         pr.total_findings = total
         pr.critical_findings = critical
         pr.health_score = max(0, 100 - (critical * 20 + (total - critical) * 2))
         await db.commit()
         logger.info("analyze_pr: committed %d findings for PR %s", total, pr_id)
+
+        try:
+            from app.services.github_integration import post_pr_review_comment
+            f_result = await db.execute(
+                select(Finding).where(Finding.pr_id == pr.id, Finding.status == FindingStatus.OPEN)
+            )
+            db_findings = f_result.scalars().all()
+            await post_pr_review_comment(db, pr.repo_id, pr.pr_number, db_findings, repo.org_id)
+        except Exception:
+            pass
