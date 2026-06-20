@@ -376,6 +376,28 @@ async def debug_analyze_pr_direct(pr_number: int):
         return {"error": str(e), "traceback": traceback.format_exc()}
 
 
+@router.post("/github/fix-my-org")
+async def fix_my_org():
+    from app.database import async_session_factory
+    from sqlalchemy import select, update
+    from app.models import User, Organization
+    try:
+        async with async_session_factory() as db:
+            vansh_org = await db.execute(select(Organization).where(Organization.slug == "vanshx999"))
+            vansh_org = vansh_org.scalar_one_or_none()
+            if not vansh_org:
+                return {"error": "vanshx999 org not found"}
+            users = await db.execute(select(User).where(User.org_id != vansh_org.id))
+            moved = 0
+            for user in users.scalars().all():
+                user.org_id = vansh_org.id
+                moved += 1
+            await db.commit()
+            return {"message": f"Moved {moved} users to vanshx999 org"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.get("/github/authorize-url")
 async def github_authorize_url():
     from app.config import settings
