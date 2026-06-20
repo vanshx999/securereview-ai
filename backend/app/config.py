@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     STRIPE_SUCCESS_URL: str = "http://localhost:3000"
     STRIPE_CANCEL_URL: str = "http://localhost:3000"
 
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,https://securereview-ai-nr4e.vercel.app"
     MAX_FILE_SIZE_MB: int = 10
     RATE_LIMIT_PER_MINUTE: int = 60
 
