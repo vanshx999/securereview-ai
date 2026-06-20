@@ -97,6 +97,7 @@ async def analyze_pr(pr_id: str, diff_data_override: Optional[str] = None):
     from app.models import PullRequest, Repository, Finding, FindingStatus
     from app.models import FindingSeverity
     from sqlalchemy import select
+    from app.services.secret_detection import scan_diff_for_patterns
 
     async with async_session_factory() as db:
         result = await db.execute(select(PullRequest).where(PullRequest.id == pr_id))
@@ -111,33 +112,42 @@ async def analyze_pr(pr_id: str, diff_data_override: Optional[str] = None):
             logger.warning("analyze_pr: repo not found for PR %s", pr_id)
             return
 
-        for i in range(3):
+        diff_text = diff_data_override if diff_data_override is not None else pr.diff_data
+        if not diff_text:
+            diff_text = ""
+        diff_text = str(diff_text)
+
+        secret_findings = await scan_diff_for_patterns(diff_text)
+        logger.info("analyze_pr: secret scan found %d findings for PR %s", len(secret_findings), pr_id)
+
+        for finding_data in secret_findings:
             finding = Finding(
                 pr_id=pr.id,
                 repo_id=pr.repo_id,
-                file_path="test.js",
-                line_start=1,
-                line_end=1,
-                severity=FindingSeverity.HIGH,
-                category="test",
-                title=f"Test finding {i}",
-                description="This is a test finding",
-                code_snippet="const x = 1;",
-                suggested_fix="Remove this line",
-                is_ai_generated=False,
-                metadata={"source": "test"},
+                file_path=str(finding_data.get("file_path", "unknown")),
+                line_start=finding_data.get("line_number") or finding_data.get("line_start"),
+                line_end=finding_data.get("line_end") or finding_data.get("line_number") or finding_data.get("line_start"),
+                severity=finding_data.get("severity", "MEDIUM"),
+                category=finding_data.get("category", "unknown"),
+                title=str(finding_data.get("title", "Security finding"))[:255],
+                description=finding_data.get("description"),
+                code_snippet=finding_data.get("code_snippet"),
+                suggested_fix=finding_data.get("suggested_fix"),
+                is_ai_generated=finding_data.get("is_ai_generated", False),
+                metadata={
+                    "cwe_id": finding_data.get("cwe_id", ""),
+                    "policy_id": finding_data.get("policy_id"),
+                    "source": finding_data.get("source", "auto"),
+                },
             )
             db.add(finding)
 
+        total = len(secret_findings)
+        critical = sum(1 for f in secret_findings if f.get("severity") == "CRITICAL")
         await db.flush()
-        findings_result = await db.execute(
-            select(Finding).where(Finding.pr_id == pr.id, Finding.status == FindingStatus.OPEN)
-        )
-        saved = len(findings_result.scalars().all())
-        logger.info("analyze_pr: saved %d test findings for PR %s", saved, pr_id)
 
-        pr.total_findings = 3
-        pr.critical_findings = 0
-        pr.health_score = 100
+        pr.total_findings = total
+        pr.critical_findings = critical
+        pr.health_score = max(0, 100 - (critical * 20 + (total - critical) * 2))
         await db.commit()
-        logger.info("analyze_pr: committed for PR %s", pr_id)
+        logger.info("analyze_pr: committed %d findings for PR %s", total, pr_id)
