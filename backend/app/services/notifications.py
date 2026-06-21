@@ -36,6 +36,86 @@ async def send_email_notification(to: str, subject: str, body: str) -> bool:
         return False
 
 
+def _format_findings_summary(findings: list[Finding], repo_name: str, pr_number: int, pr_title: str) -> str:
+    total = len(findings)
+    critical = sum(1 for f in findings if f.severity == FindingSeverity.CRITICAL)
+    high = sum(1 for f in findings if f.severity == FindingSeverity.HIGH)
+    medium = sum(1 for f in findings if f.severity == FindingSeverity.MEDIUM)
+    low = sum(1 for f in findings if f.severity == FindingSeverity.LOW)
+
+    summary = (
+        f"🔒 *SecureReview Analysis Complete*\n"
+        f"Repo: {repo_name}  |  PR: #{pr_number}  |  {pr_title}\n"
+        f"\n"
+        f"*Findings Summary:*\n"
+        f"  🔴 Critical: {critical}\n"
+        f"  🟠 High: {high}\n"
+        f"  🟡 Medium: {medium}\n"
+        f"  🟢 Low: {low}\n"
+        f"  ─────────────\n"
+        f"  Total: {total}\n"
+    )
+    return summary
+
+
+async def notify_analysis_complete(
+    db: AsyncSession,
+    org_id: str,
+    findings: list[Finding],
+    repo_name: str,
+    pr_number: int,
+    pr_title: str,
+    dashboard_url: str = "",
+):
+    result = await db.execute(
+        select(NotificationSetting).where(
+            NotificationSetting.org_id == org_id,
+            NotificationSetting.enabled == True,
+        )
+    )
+    settings = result.scalars().all()
+    if not settings:
+        return
+
+    slack_text = _format_findings_summary(findings, repo_name, pr_number, pr_title)
+    if dashboard_url:
+        slack_text += f"\n<{dashboard_url}|View on Dashboard>"
+
+    for setting in settings:
+        channel = setting.channel
+        config = setting.config
+
+        if channel == "slack" and config.get("webhook_url"):
+            blocks = [
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": slack_text},
+                }
+            ]
+            if dashboard_url:
+                blocks.append({
+                    "type": "actions",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "View on Dashboard"},
+                            "url": dashboard_url,
+                        }
+                    ],
+                })
+            await send_slack_notification(config["webhook_url"], {
+                "text": slack_text,
+                "blocks": blocks,
+            })
+
+        elif channel == "discord" and config.get("webhook_url"):
+            content = _format_findings_summary(findings, repo_name, pr_number, pr_title)
+            content = content.replace("*", "**").replace("<", "[").replace(">", "](")
+            await send_discord_notification(config["webhook_url"], {
+                "content": content,
+            })
+
+
 async def notify_critical_finding(
     db: AsyncSession,
     org_id: str,

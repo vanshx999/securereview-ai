@@ -80,12 +80,26 @@ async def get_settings(
     )
     settings = result.scalars().all()
 
-    channels = {s.channel: {"enabled": s.enabled, "config": s.config} for s in settings}
+    channel_map = {s.channel: s for s in settings}
+    result_arr = []
     for ch in ["slack", "discord", "email"]:
-        if ch not in channels:
-            channels[ch] = {"enabled": False, "config": {}}
+        if ch in channel_map:
+            s = channel_map[ch]
+            result_arr.append({
+                "id": s.id,
+                "channel": s.channel,
+                "enabled": s.enabled,
+                "config": s.config,
+            })
+        else:
+            result_arr.append({
+                "id": "",
+                "channel": ch,
+                "enabled": False,
+                "config": {},
+            })
 
-    return channels
+    return result_arr
 
 
 @router.post("/settings")
