@@ -7,6 +7,7 @@ export default function GitHubCallbackPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [error, setError] = useState('');
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     const code = searchParams.get('code');
@@ -15,16 +16,25 @@ export default function GitHubCallbackPage() {
       return;
     }
 
-    api.auth.githubLogin(code)
-      .then((data) => {
+    let attempts = 0;
+    async function tryLogin() {
+      attempts++;
+      try {
+        const data = await api.auth.githubLogin(code);
         const remember = localStorage.getItem('remember_me') !== 'false';
         setAccessToken(data.access_token, remember);
         setRefreshToken(data.refresh_token, remember);
         navigate('/dashboard', { replace: true });
-      })
-      .catch((err) => {
-        setError(err.detail || 'GitHub login failed. Please try again.');
-      });
+      } catch (err: any) {
+        if (attempts < 3 && (err.message?.includes('Failed to fetch') || err.status >= 500)) {
+          setRetrying(true);
+          setTimeout(tryLogin, 2000);
+        } else {
+          setError(err.detail || 'GitHub login failed. Please try again.');
+        }
+      }
+    }
+    tryLogin();
   }, []);
 
   return (
@@ -49,7 +59,7 @@ export default function GitHubCallbackPage() {
         ) : (
           <div className="flex flex-col items-center gap-4">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-500" />
-            <p className="text-gray-500">Completing GitHub sign in...</p>
+            <p className="text-gray-500">{retrying ? 'Backend is waking up, retrying...' : 'Completing GitHub sign in...'}</p>
           </div>
         )}
       </div>
