@@ -214,8 +214,13 @@ async def scan_diff_for_patterns(
 ) -> list[dict]:
     findings = []
     lines = diff_data.split('\n')
+    current_file = file_path or "unknown"
 
     for line_idx, line in enumerate(lines):
+        if line.startswith('+++ b/'):
+            current_file = line[6:]
+            continue
+
         if not (line.startswith('+') or line.startswith('-')):
             continue
 
@@ -231,14 +236,14 @@ async def scan_diff_for_patterns(
                 matches = re.finditer(pattern, code)
                 for match in matches:
                     findings.append({
-                        "file_path": file_path or "unknown",
+                        "file_path": current_file,
                         "line_number": line_idx + 1,
                         "line_start": line_idx + 1,
                         "line_end": line_idx + 1,
                         "severity": severity,
                         "category": category_name.lower(),
                         "title": title,
-                        "description": f"Potential {title.lower()} detected in {file_path or 'code'} at line {line_idx + 1}",
+                        "description": f"Potential {title.lower()} detected in {current_file} at line {line_idx + 1}",
                         "code_snippet": code[:500],
                         "suggested_fix": generate_fix_suggestion(title, code),
                         "is_ai_generated": category_name == "AI_HALLUCINATION",
