@@ -271,9 +271,9 @@ async def make_me_admin(current_user: User = Depends(get_current_user)):
     from app.database import async_session_factory
     from app.models import UserRole
     try:
-    async with async_session_factory() as db:
-        u = await db.execute(select(User).where(User.id == current_user.id))
-        u = u.scalar_one_or_none()
+        async with async_session_factory() as db:
+            u = await db.execute(select(User).where(User.id == current_user.id))
+            u = u.scalar_one_or_none()
             u.role = UserRole.ADMIN
             await db.commit()
             return {"message": f"User {u.email} is now admin"}
