@@ -244,45 +244,6 @@ async def github_status():
     }
 
 
-@router.post("/github/fix-my-org")
-async def fix_my_org():
-    from app.database import async_session_factory
-    from sqlalchemy import select, update
-    from app.models import User, Organization
-    try:
-        async with async_session_factory() as db:
-            vansh_org = await db.execute(select(Organization).where(Organization.slug == "vanshx999"))
-            vansh_org = vansh_org.scalar_one_or_none()
-            if not vansh_org:
-                return {"error": "vanshx999 org not found"}
-            users = await db.execute(select(User).where(User.org_id != vansh_org.id))
-            moved = 0
-            for user in users.scalars().all():
-                user.org_id = vansh_org.id
-                moved += 1
-            await db.commit()
-            return {"message": f"Moved {moved} users to vanshx999 org"}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-@router.get("/make-me-admin")
-async def make_me_admin():
-    from app.database import async_session_factory
-    from app.models import UserRole
-    try:
-        async with async_session_factory() as db:
-            u = await db.execute(select(User).order_by(User.created_at).limit(1))
-            u = u.scalar_one_or_none()
-            if not u:
-                return {"error": "No users found"}
-            u.role = UserRole.ADMIN
-            await db.commit()
-            return {"message": f"User {u.email} is now admin"}
-    except Exception as e:
-        return {"error": str(e)}
-
-
 @router.get("/github/authorize-url")
 async def github_authorize_url():
     from app.config import settings
