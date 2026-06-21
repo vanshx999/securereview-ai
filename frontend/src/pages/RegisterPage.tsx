@@ -62,10 +62,9 @@ export default function RegisterPage() {
             </div>
             <div>
               <label className="label">Role</label>
-              <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
+               <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
                 <option value="dev">Developer</option>
                 <option value="security">Security Engineer</option>
-                <option value="admin">Admin</option>
               </select>
             </div>
             <button type="submit" className="btn-primary w-full" disabled={loading}>

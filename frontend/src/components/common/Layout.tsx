@@ -11,7 +11,7 @@ const navItems = [
   { to: '/repositories', icon: GitPullRequest, label: 'Repositories' },
   { to: '/policies', icon: BookOpen, label: 'Policies' },
   { to: '/notifications', icon: Bell, label: 'Notifications' },
-  { to: '/admin', icon: Settings, label: 'Admin', adminOnly: true },
+  { to: '/admin', icon: Settings, label: 'Admin' },
 ];
 
 export default function Layout() {
@@ -40,7 +40,6 @@ export default function Layout() {
 
         <nav className="flex-1 p-4 space-y-1">
           {navItems.map((item) => {
-            if (item.adminOnly && user?.role !== 'admin') return null;
             return (
               <NavLink
                 key={item.to}

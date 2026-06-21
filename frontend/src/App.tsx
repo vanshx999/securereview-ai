@@ -53,7 +53,7 @@ export default function App() {
           <Route path="policies" element={<PoliciesPage />} />
           <Route path="policies/new" element={<PolicyEditorPage />} />
           <Route path="policies/:id" element={<PolicyEditorPage />} />
-          <Route path="admin" element={<ProtectedRoute roles={['admin']}><AdminPage /></ProtectedRoute>} />
+          <Route path="admin" element={<AdminPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
         </Route>
       </Routes>

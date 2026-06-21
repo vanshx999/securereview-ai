@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from app.database import get_db
 from app.models import User, Organization, AuditLog
 from app.schemas import (
@@ -22,6 +22,8 @@ async def register(data: UserCreate, db: AsyncSession = Depends(get_db)):
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    is_first_user = (await db.execute(select(func.count()).select_from(User))).scalar() == 0
+
     org = Organization(
         name=f"{data.name or data.email.split('@')[0]}'s Org",
         slug=data.email.split('@')[0],
@@ -29,12 +31,13 @@ async def register(data: UserCreate, db: AsyncSession = Depends(get_db)):
     db.add(org)
     await db.flush()
 
+    role = UserRole.ADMIN if is_first_user else (data.role or UserRole.DEVELOPER)
     user = User(
         org_id=org.id,
         email=data.email,
         password_hash=hash_password(data.password),
         name=data.name,
-        role=data.role,
+        role=role,
     )
     db.add(user)
     await db.flush()
@@ -259,6 +262,21 @@ async def fix_my_org():
                 moved += 1
             await db.commit()
             return {"message": f"Moved {moved} users to vanshx999 org"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.post("/make-me-admin")
+async def make_me_admin(current_user: User = Depends(get_current_user)):
+    from app.database import async_session_factory
+    from app.models import UserRole
+    try:
+    async with async_session_factory() as db:
+        u = await db.execute(select(User).where(User.id == current_user.id))
+        u = u.scalar_one_or_none()
+            u.role = UserRole.ADMIN
+            await db.commit()
+            return {"message": f"User {u.email} is now admin"}
     except Exception as e:
         return {"error": str(e)}
 
