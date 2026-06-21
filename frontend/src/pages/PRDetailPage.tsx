@@ -25,6 +25,7 @@ export default function PRDetailPage() {
   const [dismissReason, setDismissReason] = useState('');
   const [dismissModal, setDismissModal] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showDiff, setShowDiff] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -122,6 +123,26 @@ setFindings(findingsData.findings ?? findingsData);
             </div>
           ))}
         </div>
+
+        {pr.diff_data && (
+          <div className="mt-4">
+            <button onClick={() => setShowDiff(!showDiff)} className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200">
+              {showDiff ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              {showDiff ? 'Hide' : 'Show'} Diff ({pr.diff_data.split('\n').length} lines)
+            </button>
+            {showDiff && (
+              <pre className="mt-2 bg-gray-950 rounded-lg p-4 text-xs font-mono leading-relaxed overflow-x-auto max-h-96 overflow-y-auto border border-gray-800">
+                {pr.diff_data.split('\n').map((line, i) => {
+                  let cls = 'text-gray-400';
+                  if (line.startsWith('+')) cls = 'text-green-400 bg-green-950/30';
+                  else if (line.startsWith('-')) cls = 'text-red-400 bg-red-950/30';
+                  else if (line.startsWith('@@')) cls = 'text-cyan-400 bg-cyan-950/20';
+                  return <div key={i} className={cls}>{line}</div>;
+                })}
+              </pre>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="space-y-3">

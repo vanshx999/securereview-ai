@@ -82,6 +82,7 @@ class PullRequestResponse(BaseModel):
     commit_sha: str
     author: Optional[str]
     status: PRStatus
+    diff_data: Optional[str] = None
     ai_code_percentage: float
     health_score: int
     total_findings: int
