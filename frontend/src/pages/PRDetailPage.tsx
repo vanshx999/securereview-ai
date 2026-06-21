@@ -26,6 +26,7 @@ export default function PRDetailPage() {
   const [dismissModal, setDismissModal] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showDiff, setShowDiff] = useState(false);
+  const [reanalyzing, setReanalyzing] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -66,6 +67,23 @@ setFindings(findingsData.findings ?? findingsData);
     }
   };
 
+  const handleReanalyze = async () => {
+    setReanalyzing(true);
+    try {
+      await api.prs.reanalyze(id!);
+      const [prData, findingsData] = await Promise.all([
+        api.prs.get(id!),
+        api.prs.findings(id!),
+      ]);
+      setPr(prData);
+      setFindings(findingsData.findings ?? findingsData);
+    } catch (err) {
+      console.error('Failed to re-analyze:', err);
+    } finally {
+      setReanalyzing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -83,9 +101,14 @@ setFindings(findingsData.findings ?? findingsData);
 
   return (
     <div className="space-y-6">
-      <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-gray-500 hover:text-gray-300 transition-colors">
-        <ArrowLeft className="w-4 h-4" /> Back to Dashboard
-      </button>
+      <div className="flex items-center justify-between">
+        <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-gray-500 hover:text-gray-300 transition-colors">
+          <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+        </button>
+        <button onClick={handleReanalyze} disabled={reanalyzing} className="btn-secondary text-sm py-1.5">
+          {reanalyzing ? 'Analyzing...' : 'Re-analyze'}
+        </button>
+      </div>
 
       <div className="card">
         <div className="flex items-start justify-between">
