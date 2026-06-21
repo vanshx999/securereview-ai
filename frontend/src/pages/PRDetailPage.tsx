@@ -30,12 +30,12 @@ export default function PRDetailPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [prData, findingsData] = await Promise.all([
-          api.prs.get(id!),
-          api.prs.findings(id!),
-        ]);
-        setPr(prData);
-        setFindings(findingsData);
+const [prData, findingsData] = await Promise.all([
+  api.prs.get(id!),
+  api.prs.findings(id!),
+]);
+setPr(prData);
+setFindings(findingsData.findings ?? findingsData);
       } catch (err) {
         console.error('Failed to load PR:', err);
       } finally {
