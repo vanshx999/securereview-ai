@@ -66,7 +66,7 @@ export default function DashboardPage() {
     try {
       const [s, prs, findings, t] = await Promise.all([
         api.dashboard.stats(),
-        api.dashboard.recentPrs(5),
+        api.dashboard.recentPrs(50),
         api.dashboard.recentFindings(10),
         api.dashboard.vulnerabilityTrends(14),
       ]);
