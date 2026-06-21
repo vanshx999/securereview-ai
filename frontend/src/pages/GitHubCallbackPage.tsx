@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { api } from '../services/api';
+import { api, setAccessToken, setRefreshToken } from '../services/api';
 import { Shield } from 'lucide-react';
 
 export default function GitHubCallbackPage() {
@@ -17,8 +17,9 @@ export default function GitHubCallbackPage() {
 
     api.auth.githubLogin(code)
       .then((data) => {
-        localStorage.setItem('access_token', data.access_token);
-        localStorage.setItem('refresh_token', data.refresh_token);
+        const remember = localStorage.getItem('remember_me') !== 'false';
+        setAccessToken(data.access_token, remember);
+        setRefreshToken(data.refresh_token, remember);
         navigate('/dashboard', { replace: true });
       })
       .catch((err) => {

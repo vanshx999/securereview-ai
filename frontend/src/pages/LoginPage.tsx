@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../hooks/useAuth';
 import { Shield, Eye, EyeOff, Github } from 'lucide-react';
+import { API_BASE } from '../services/api';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -9,6 +10,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const { login } = useAuthStore();
   const navigate = useNavigate();
 
@@ -17,7 +19,7 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
+      await login(email, password, rememberMe);
       navigate('/dashboard');
     } catch (err: any) {
       setError(err.detail || 'Login failed');
@@ -78,6 +80,10 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+            <div className="flex items-center gap-2">
+              <input id="remember" type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="rounded border-gray-600 bg-gray-800 text-brand-500 focus:ring-brand-500" />
+              <label htmlFor="remember" className="text-sm text-gray-400">Keep me signed in</label>
+            </div>
             <button type="submit" className="btn-primary w-full" disabled={loading}>
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
@@ -96,7 +102,7 @@ export default function LoginPage() {
             type="button"
             onClick={async () => {
               try {
-                const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/github/authorize-url`);
+                const res = await fetch(`${API_BASE}/auth/github/authorize-url`);
                 const data = await res.json();
                 if (data.url) window.location.href = data.url;
               } catch {

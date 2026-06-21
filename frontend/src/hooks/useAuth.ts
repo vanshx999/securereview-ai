@@ -1,53 +1,53 @@
 import { create } from 'zustand';
 import type { User, AuthTokens } from '../types';
-import { api } from '../services/api';
+import { api, setAccessToken, setRefreshToken, clearTokens, getAccessToken } from '../services/api';
 
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string, role: string) => Promise<void>;
+  login: (email: string, password: string, remember?: boolean) => Promise<void>;
+  register: (email: string, password: string, name: string, role: string, remember?: boolean) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  isAuthenticated: !!localStorage.getItem('access_token'),
+  isAuthenticated: !!getAccessToken(),
   isLoading: true,
 
-  login: async (email, password) => {
+  login: async (email, password, remember = true) => {
     const data = await api.auth.login(email, password);
-    localStorage.setItem('access_token', data.access_token);
-    localStorage.setItem('refresh_token', data.refresh_token);
+    setAccessToken(data.access_token, remember);
+    setRefreshToken(data.refresh_token, remember);
+    localStorage.setItem('remember_me', String(remember));
     set({ user: data.user, isAuthenticated: true });
   },
 
-  register: async (email, password, name, role) => {
+  register: async (email, password, name, role, remember = true) => {
     const data = await api.auth.register(email, password, name, role);
-    localStorage.setItem('access_token', data.access_token);
-    localStorage.setItem('refresh_token', data.refresh_token);
+    setAccessToken(data.access_token, remember);
+    setRefreshToken(data.refresh_token, remember);
+    localStorage.setItem('remember_me', String(remember));
     set({ user: data.user, isAuthenticated: true });
   },
 
   logout: () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
+    clearTokens();
     set({ user: null, isAuthenticated: false });
   },
 
   checkAuth: async () => {
     try {
-      if (localStorage.getItem('access_token')) {
+      if (getAccessToken()) {
         const user = await api.auth.me();
         set({ user, isAuthenticated: true, isLoading: false });
       } else {
         set({ isLoading: false });
       }
     } catch {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
+      clearTokens();
       set({ user: null, isAuthenticated: false, isLoading: false });
     }
   },

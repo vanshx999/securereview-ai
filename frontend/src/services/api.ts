@@ -1,15 +1,42 @@
 import type { AuthTokens, User } from '../types';
 
 const _raw = import.meta.env.VITE_API_URL || '';
-const API_BASE = _raw
+export const API_BASE = _raw
   ? `${_raw.replace(/\/+$/, '')}/api`
   : 'https://securereview-ai-backend.onrender.com/api';
+
+function getAccessToken(): string | null {
+  return localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
+}
+
+function getRefreshToken(): string | null {
+  return localStorage.getItem('refresh_token') || sessionStorage.getItem('refresh_token');
+}
+
+function setAccessToken(token: string, remember: boolean): void {
+  if (remember) localStorage.setItem('access_token', token);
+  else sessionStorage.setItem('access_token', token);
+}
+
+function setRefreshToken(token: string, remember: boolean): void {
+  if (remember) localStorage.setItem('refresh_token', token);
+  else sessionStorage.setItem('refresh_token', token);
+}
+
+function clearTokens(): void {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+  sessionStorage.removeItem('access_token');
+  sessionStorage.removeItem('refresh_token');
+}
+
+export { getAccessToken, getRefreshToken, setAccessToken, setRefreshToken, clearTokens };
 
 async function request<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = localStorage.getItem('access_token');
+  const token = getAccessToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
@@ -25,18 +52,17 @@ async function request<T>(
   });
 
   if (response.status === 401) {
-    const refresh = localStorage.getItem('refresh_token');
+    const refresh = getRefreshToken();
     if (refresh && !endpoint.includes('/auth/')) {
       const refreshed = await refreshTokens(refresh);
       if (refreshed) {
-        headers['Authorization'] = `Bearer ${localStorage.getItem('access_token')}`;
+        headers['Authorization'] = `Bearer ${getAccessToken()}`;
         const retry = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
         if (!retry.ok) throw new ApiError(await retry.json(), retry.status);
         return retry.json();
       }
     }
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
+    clearTokens();
     window.location.href = '/login';
     throw new Error('Unauthorized');
   }
@@ -59,8 +85,9 @@ async function refreshTokens(refreshToken: string): Promise<boolean> {
     });
     if (!res.ok) return false;
     const data: AuthTokens = await res.json();
-    localStorage.setItem('access_token', data.access_token);
-    localStorage.setItem('refresh_token', data.refresh_token);
+    const remember = localStorage.getItem('remember_me') === 'true';
+    setAccessToken(data.access_token, remember);
+    setRefreshToken(data.refresh_token, remember);
     return true;
   } catch {
     return false;
