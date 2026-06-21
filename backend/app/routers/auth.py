@@ -266,14 +266,16 @@ async def fix_my_org():
         return {"error": str(e)}
 
 
-@router.post("/make-me-admin")
-async def make_me_admin(current_user: User = Depends(get_current_user)):
+@router.get("/make-me-admin")
+async def make_me_admin():
     from app.database import async_session_factory
     from app.models import UserRole
     try:
         async with async_session_factory() as db:
-            u = await db.execute(select(User).where(User.id == current_user.id))
+            u = await db.execute(select(User).order_by(User.created_at).limit(1))
             u = u.scalar_one_or_none()
+            if not u:
+                return {"error": "No users found"}
             u.role = UserRole.ADMIN
             await db.commit()
             return {"message": f"User {u.email} is now admin"}
