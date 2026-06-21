@@ -95,7 +95,7 @@ export default function AdminPage() {
 
       {activeTab === 'users' && (
         <div className="card">
-          <h3 className="text-lg font-semibold text-white mb-4">Organization Users</h3>
+          <h3 className="text-lg font-semibold text-white mb-4">Organization Users ({orgUsers.length})</h3>
           <div className="space-y-3">
             {orgUsers.length === 0 && <p className="text-gray-500 text-sm">No users found</p>}
             {orgUsers.map((user) => (
@@ -109,7 +109,8 @@ export default function AdminPage() {
                     <p className="text-xs text-gray-500">{user.email}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-gray-500">Joined {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'Unknown'}</span>
                   <select className="input text-sm py-1 w-32" value={user.role} onChange={(e) => handleRoleChange(user.id, e.target.value)}>
                     <option value="admin">Admin</option>
                     <option value="security">Security</option>
