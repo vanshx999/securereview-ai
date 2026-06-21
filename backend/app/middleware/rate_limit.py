@@ -16,7 +16,7 @@ async def check_rate_limit(
     key = f"{REDIS_RATE_LIMIT_PREFIX}{client_ip}:{route}"
 
     try:
-        r = redis.from_url(settings.REDIS_URL, decoding_responses=True)
+        r = redis.from_url(settings.REDIS_URL, decoding_responses=True, socket_connect_timeout=2)
         current = await r.get(key)
 
         if current is None:
@@ -53,7 +53,7 @@ async def check_user_rate_limit(
     key = f"{REDIS_RATE_LIMIT_PREFIX}user:{user_id}"
 
     try:
-        r = redis.from_url(settings.REDIS_URL, decoding_responses=True)
+        r = redis.from_url(settings.REDIS_URL, decoding_responses=True, socket_connect_timeout=2)
         current = await r.get(key)
 
         if current is None:
@@ -82,11 +82,11 @@ async def check_org_analysis_rate_limit(org_id: str) -> None:
     key = f"{REDIS_RATE_LIMIT_PREFIX}org:{org_id}:analysis:{today}"
 
     try:
-        r = redis.from_url(settings.REDIS_URL, decoding_responses=True)
+        r = redis.from_url(settings.REDIS_URL, decoding_responses=True, socket_connect_timeout=2)
         current = await r.get(key)
 
         if current is None:
-            await r.setex(key, 86400, 1)
+            await r.setex(key, window_seconds, 1)
         else:
             current_count = int(current)
             from app.models import SubscriptionPlan, Organization, Subscription

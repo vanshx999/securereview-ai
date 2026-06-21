@@ -123,8 +123,8 @@ async def reanalyze_pr(
 
     await check_org_analysis_rate_limit(current_user.org_id)
 
-    asyncio.ensure_future(analyze_pr(pr_id))
-    return {"message": "Re-analysis queued", "pr_id": pr_id}
+    await analyze_pr(pr_id)
+    return {"message": "Re-analysis complete", "pr_id": pr_id}
 
 
 @router.patch("/{pr_id}/findings/{finding_id}")
