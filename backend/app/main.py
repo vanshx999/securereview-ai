@@ -1,5 +1,4 @@
-from fastapi import FastAPI, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from contextlib import asynccontextmanager
@@ -37,20 +36,6 @@ app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=["*"],
 )
-
-import traceback
-
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    return JSONResponse(
-        status_code=500,
-        content={"detail": f"Internal error: {str(exc)}", "trace": traceback.format_exc()},
-        headers={"Access-Control-Allow-Origin": "*"},
-    )
-
-
-
 
 
 app.include_router(auth.router)
