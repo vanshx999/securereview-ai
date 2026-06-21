@@ -1,22 +1,28 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../hooks/useAuth';
 import {
   Shield, LayoutDashboard, GitPullRequest, BookOpen, Settings,
   Bell, LogOut, Users, ChevronDown,
 } from 'lucide-react';
+import { API_BASE } from '../../services/api';
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/repositories', icon: GitPullRequest, label: 'Repositories' },
   { to: '/policies', icon: BookOpen, label: 'Policies' },
   { to: '/notifications', icon: Bell, label: 'Notifications' },
-  { to: '/admin', icon: Settings, label: 'Admin' },
+  { to: '/admin', icon: Settings, label: 'Admin', adminOnly: true },
 ];
 
 export default function Layout() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
+  const [totalUsers, setTotalUsers] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/dashboard/platform-stats`).then(r => r.json()).then(d => setTotalUsers(d.total_users)).catch(() => {});
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -40,6 +46,7 @@ export default function Layout() {
 
         <nav className="flex-1 p-4 space-y-1">
           {navItems.map((item) => {
+            if (item.adminOnly && user?.role !== 'admin') return null;
             return (
               <NavLink
                 key={item.to}
@@ -59,7 +66,10 @@ export default function Layout() {
           })}
         </nav>
 
-        <div className="p-4 border-t border-gray-800">
+        <div className="p-4 border-t border-gray-800 space-y-3">
+          {totalUsers !== null && (
+            <div className="text-xs text-gray-500 text-center">Platform users: {totalUsers}</div>
+          )}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-sm font-medium">

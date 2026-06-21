@@ -110,6 +110,15 @@ async def _build_dashboard_stats(
     )
 
 
+@router.get("/platform-stats")
+async def get_platform_stats(db: AsyncSession = Depends(get_db)):
+    from app.models import User
+    total_users = (await db.execute(select(func.count()).select_from(User))).scalar() or 0
+    total_prs = (await db.execute(select(func.count()).select_from(PullRequest))).scalar() or 0
+    total_findings = (await db.execute(select(func.count()).select_from(Finding))).scalar() or 0
+    return {"total_users": total_users, "total_prs": total_prs, "total_findings": total_findings}
+
+
 @router.get("/stats")
 async def get_dashboard_stats(
     db: AsyncSession = Depends(get_db),
