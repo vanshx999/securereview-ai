@@ -56,30 +56,33 @@ export default function DashboardPage() {
   const [recentFindings, setRecentFindings] = useState<Finding[]>([]);
   const [trends, setTrends] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const [s, prs, findings, t] = await Promise.all([
-          api.dashboard.stats(),
-          api.dashboard.recentPrs(5),
-          api.dashboard.recentFindings(10),
-          api.dashboard.vulnerabilityTrends(14),
-        ]);
-        setStats(s);
-        setRecentPrs(prs);
-        setRecentFindings(findings);
-        setTrends(t);
-      } catch (err) {
-        console.error('Failed to load dashboard:', err);
-      } finally {
-        setLoading(false);
-      }
+  async function load() {
+    setLoading(true);
+    setError('');
+    try {
+      const [s, prs, findings, t] = await Promise.all([
+        api.dashboard.stats(),
+        api.dashboard.recentPrs(5),
+        api.dashboard.recentFindings(10),
+        api.dashboard.vulnerabilityTrends(14),
+      ]);
+      setStats(s);
+      setRecentPrs(prs);
+      setRecentFindings(findings);
+      setTrends(t);
+    } catch (err: any) {
+      setError(err.detail || err.message || 'Failed to load dashboard data');
+      console.error('Failed to load dashboard:', err);
+    } finally {
+      setLoading(false);
     }
-    load();
-  }, []);
+  }
+
+  useEffect(() => { load(); }, []);
 
   if (loading) {
     return (
@@ -88,6 +91,17 @@ export default function DashboardPage() {
       </div>
     );
   }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <div className="bg-red-900/30 border border-red-800 text-red-400 px-6 py-4 rounded-lg text-sm max-w-md text-center">{error}</div>
+        <button onClick={load} className="btn-secondary text-sm">Retry</button>
+      </div>
+    );
+  }
+
+  const hasNoData = stats && stats.total_repos === 0 && stats.total_prs_analyzed === 0;
 
   const severityData = [
     { name: 'Critical', value: stats?.critical_findings || 0, color: '#dc2626' },
@@ -102,6 +116,14 @@ export default function DashboardPage() {
           <p className="text-gray-500 mt-1">Welcome back, {user?.name || 'User'}</p>
         </div>
       </div>
+
+      {hasNoData && (
+        <div className="bg-brand-600/10 border border-brand-600/30 rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-2">Welcome to SecureReview AI!</h2>
+          <p className="text-gray-400 text-sm mb-4">Connect a GitHub repository to start analyzing pull requests for security issues. We'll automatically scan every PR for secrets, vulnerabilities, and AI-generated code risks.</p>
+          <button onClick={() => navigate('/repositories')} className="btn-primary text-sm">Connect a Repository</button>
+        </div>
+      )}
 
       <div className="grid grid-cols-4 gap-6">
         <StatCard title="Total Findings" value={stats?.total_findings || 0} icon={AlertTriangle} />
