@@ -132,7 +132,7 @@ export default function DashboardPage() {
         <div className="card">
           <h3 className="text-lg font-semibold text-white mb-4">Top Vulnerability Types</h3>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={[{ category: 'Hardcoded Secrets', count: 12 }, { category: 'SQL Injection', count: 8 }, { category: 'XSS', count: 5 }, { category: 'Insecure Crypto', count: 3 }, { category: 'Path Traversal', count: 2 }]}>
+            <BarChart data={(stats?.top_vulnerabilities?.length ? stats.top_vulnerabilities : [{ category: 'No data', count: 0 }]).map(v => ({ category: v.category, count: v.count || v.counts || 0 }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
               <XAxis dataKey="category" stroke="#6b7280" fontSize={11} />
               <YAxis stroke="#6b7280" fontSize={12} />
