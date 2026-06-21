@@ -95,7 +95,7 @@ export default function AdminPage() {
 
       {activeTab === 'users' && (
         <div className="card">
-          <h3 className="text-lg font-semibold text-white mb-4">Organization Users ({orgUsers.length})</h3>
+          <h3 className="text-lg font-semibold text-white mb-4">All Users ({orgUsers.length})</h3>
           <div className="space-y-3">
             {orgUsers.length === 0 && <p className="text-gray-500 text-sm">No users found</p>}
             {orgUsers.map((user) => (
@@ -106,7 +106,7 @@ export default function AdminPage() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-200">{user.name || 'Unnamed'}</p>
-                    <p className="text-xs text-gray-500">{user.email}</p>
+                    <p className="text-xs text-gray-500">{user.email} · {user.org_name || user.role}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">

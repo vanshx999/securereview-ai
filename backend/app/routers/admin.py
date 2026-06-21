@@ -62,15 +62,18 @@ async def list_users(
     current_user: User = Depends(require_admin),
 ):
     result = await db.execute(
-        select(User).where(User.org_id == current_user.org_id).order_by(User.created_at)
+        select(User, Organization.name.label("org_name"))
+        .join(Organization, User.org_id == Organization.id, isouter=True)
+        .order_by(User.created_at)
     )
-    users = result.scalars().all()
+    rows = result.all()
 
     return [
         {
             "id": u.id,
             "email": u.email,
             "name": u.name,
+            "org_name": org_name or "Unknown",
             "role": u.role.value,
             "is_active": u.is_active,
             "avatar_url": u.avatar_url,
@@ -78,7 +81,7 @@ async def list_users(
             "created_at": u.created_at.isoformat(),
             "last_login": None,
         }
-        for u in users
+        for u, org_name in rows
     ]
 
 
