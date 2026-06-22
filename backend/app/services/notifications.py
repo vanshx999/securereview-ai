@@ -15,11 +15,15 @@ async def send_slack_notification(webhook_url: str, message: dict) -> bool:
 
 
 async def send_discord_notification(webhook_url: str, message: dict) -> bool:
+    import logging
+    logger = logging.getLogger(__name__)
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(webhook_url, json=message)
+            logger.info("send_discord_notification: status=%d url=%s", resp.status_code, webhook_url[:50])
             return resp.status_code == 204
-    except Exception:
+    except Exception as e:
+        logger.exception("send_discord_notification failed: %s", str(e))
         return False
 
 
@@ -67,6 +71,10 @@ async def notify_analysis_complete(
     pr_title: str,
     dashboard_url: str = "",
 ):
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("notify_analysis_complete: org_id=%s findings=%d", org_id, len(findings))
+
     result = await db.execute(
         select(NotificationSetting).where(
             NotificationSetting.org_id == org_id,
@@ -74,8 +82,13 @@ async def notify_analysis_complete(
         )
     )
     settings = result.scalars().all()
+    logger.info("notify_analysis_complete: found %d enabled notification settings", len(settings))
     if not settings:
+        logger.info("notify_analysis_complete: no enabled settings found for org %s", org_id)
         return
+
+    for s in settings:
+        logger.info("notify_analysis_complete: channel=%s config=%s", s.channel, s.config)
 
     slack_text = _format_findings_summary(findings, repo_name, pr_number, pr_title)
     if dashboard_url:

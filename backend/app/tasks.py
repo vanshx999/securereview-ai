@@ -199,9 +199,12 @@ async def analyze_pr(pr_id: str, diff_data_override: Optional[str] = None):
             db_findings = f_result.scalars().all()
 
             dashboard_url = f"https://securereview-ai-nr4e.vercel.app/prs/{pr.id}"
+            logger.info("tasks: calling notify_analysis_complete for PR %s", pr_id)
             await notify_analysis_complete(
                 db, repo.org_id, db_findings, repo.full_name,
                 pr.pr_number, pr.title or "", dashboard_url,
             )
-        except Exception:
+            logger.info("tasks: notify_analysis_complete done for PR %s", pr_id)
+        except Exception as e:
+            logger.exception("tasks: notify_analysis_complete failed for PR %s: %s", pr_id, str(e))
             pass
