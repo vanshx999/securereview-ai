@@ -263,6 +263,7 @@ async def github_webhook(
                     webhook_event.processed = True
 
                     if diff_data:
+                        await db.commit()
                         try:
                             await analyze_pr(pr.id, diff_data)
                         except Exception as exc:
