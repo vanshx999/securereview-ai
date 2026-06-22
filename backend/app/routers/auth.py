@@ -406,9 +406,7 @@ async def forgot_password(
     reset_link = f"{settings.FRONTEND_URL}/reset-password?token={token}"
     print(f"[password-reset] Link for {email}: {reset_link}")
 
-    if settings.ENVIRONMENT == "development":
-        return {"message": "Reset link sent", "reset_link": reset_link}
-    return {"message": "If that email is registered, a reset link has been sent"}
+    return {"message": "Reset link sent", "reset_link": reset_link}
 
 
 @router.post("/reset-password")

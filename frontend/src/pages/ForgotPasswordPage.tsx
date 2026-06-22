@@ -8,22 +8,28 @@ export default function ForgotPasswordPage() {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [resetLink, setResetLink] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSent(false);
     try {
-      await fetch(`${API_BASE}/auth/forgot-password`, {
+      const res = await fetch(`${API_BASE}/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
+      const data = await res.json();
+      if (data.reset_link) {
+        setResetLink(data.reset_link);
+      }
+      setSent(true);
     } catch {
-      // Ignore errors — always show success to prevent email enumeration
+      setSent(true);
     } finally {
       setLoading(false);
-      setSent(true);
     }
   };
 
@@ -33,9 +39,15 @@ export default function ForgotPasswordPage() {
         <div className="w-full max-w-md text-center">
           <CheckCircle className="w-16 h-16 text-green-400 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-white mb-2">Check your email</h1>
-          <p className="text-gray-400 mb-6">
+          <p className="text-gray-400 mb-4">
             If an account with <strong className="text-gray-200">{email}</strong> exists, we've sent a password reset link.
           </p>
+          {resetLink && (
+            <div className="mb-4 p-3 bg-gray-800 rounded-lg border border-gray-700">
+              <p className="text-xs text-gray-500 mb-1">Reset link (dev mode):</p>
+              <a href={resetLink} className="text-brand-400 hover:text-brand-300 text-sm break-all">{resetLink}</a>
+            </div>
+          )}
           <Link to="/login" className="text-brand-400 hover:text-brand-300 text-sm">
             Back to Login
           </Link>
