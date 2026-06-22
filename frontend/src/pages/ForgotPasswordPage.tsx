@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Shield, Mail, ArrowLeft, CheckCircle } from 'lucide-react';
-import { API_BASE } from '../services/api';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -14,7 +13,7 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+      const res = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
