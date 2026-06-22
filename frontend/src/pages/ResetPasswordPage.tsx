@@ -30,7 +30,7 @@ export default function ResetPasswordPage() {
         body: JSON.stringify({ token, password }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed to reset password');
+      if (!res.ok) throw new Error(data.detail || data.error || 'Failed to reset password');
       setDone(true);
     } catch (err: any) {
       setError(err.message);
