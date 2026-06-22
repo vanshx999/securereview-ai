@@ -19,7 +19,7 @@ export default function ForgotPasswordPage() {
         body: JSON.stringify({ email }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed to send reset email');
+      if (!res.ok) throw new Error(data.detail || data.error || 'Failed to send reset email');
       if (data.reset_link) {
         window.location.href = data.reset_link;
         return;
