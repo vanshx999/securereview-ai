@@ -180,7 +180,6 @@ async def analyze_pr(pr_id: str, diff_data_override: Optional[str] = None):
 
         try:
             from app.services.github_integration import post_pr_review_comment
-            from app.services.notifications import notify_analysis_complete
 
             f_result = await db.execute(
                 select(Finding).where(Finding.pr_id == pr.id, Finding.status == FindingStatus.OPEN)
@@ -188,6 +187,16 @@ async def analyze_pr(pr_id: str, diff_data_override: Optional[str] = None):
             db_findings = f_result.scalars().all()
 
             await post_pr_review_comment(db, pr.repo_id, pr.pr_number, db_findings, repo.org_id)
+        except Exception:
+            pass
+
+        try:
+            from app.services.notifications import notify_analysis_complete
+
+            f_result = await db.execute(
+                select(Finding).where(Finding.pr_id == pr.id, Finding.status == FindingStatus.OPEN)
+            )
+            db_findings = f_result.scalars().all()
 
             dashboard_url = f"https://securereview-ai-nr4e.vercel.app/prs/{pr.id}"
             await notify_analysis_complete(
