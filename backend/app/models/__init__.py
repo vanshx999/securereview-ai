@@ -276,17 +276,6 @@ class Invoice(Base):
     subscription = relationship("Subscription", back_populates="invoices")
 
 
-class PasswordResetToken(Base):
-    __tablename__ = "password_reset_tokens"
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, ForeignKey("users.id"), nullable=False)
-    token = Column(String(255), unique=True, nullable=False, index=True)
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-    used = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), default=utcnow)
-
-
 class NotificationSetting(Base):
     __tablename__ = "notification_settings"
 

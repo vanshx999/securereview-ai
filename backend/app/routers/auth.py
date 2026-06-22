@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.database import get_db
@@ -372,77 +371,3 @@ async def github_callback(
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: User = Depends(get_current_user)):
     return UserResponse.model_validate(current_user)
-
-
-@router.post("/forgot-password")
-async def forgot_password(
-    data: dict,
-    db: AsyncSession = Depends(get_db),
-):
-    email = data.get("email", "")
-    if not email:
-        raise HTTPException(status_code=400, detail="Email is required")
-
-    result = await db.execute(select(User).where(User.email == email))
-    user = result.scalar_one_or_none()
-
-    # Always return success to prevent email enumeration
-    if not user:
-        return {"message": "If that email is registered, a reset link has been sent"}
-
-    import secrets
-    from datetime import timedelta
-    from app.models import PasswordResetToken
-
-    token = secrets.token_urlsafe(48)
-    reset = PasswordResetToken(
-        user_id=user.id,
-        token=token,
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
-    )
-    db.add(reset)
-    await db.commit()
-
-    reset_link = f"{settings.FRONTEND_URL}/reset-password?token={token}"
-    print(f"[password-reset] Link for {email}: {reset_link}")
-
-    return {"message": "Reset link sent", "reset_link": reset_link}
-
-
-@router.post("/reset-password")
-async def reset_password(
-    data: dict,
-    db: AsyncSession = Depends(get_db),
-):
-    token = data.get("token", "")
-    new_password = data.get("password", "")
-    if not token or not new_password:
-        raise HTTPException(status_code=400, detail="Token and password are required")
-    if len(new_password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
-
-    from datetime import datetime, timezone
-    from app.models import PasswordResetToken
-    from sqlalchemy import update
-
-    result = await db.execute(
-        select(PasswordResetToken).where(
-            PasswordResetToken.token == token,
-            PasswordResetToken.used == False,
-            PasswordResetToken.expires_at > datetime.now(timezone.utc),
-        )
-    )
-    reset = result.scalar_one_or_none()
-    if not reset:
-        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
-
-    user_result = await db.execute(select(User).where(User.id == reset.user_id))
-    user = user_result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=400, detail="User not found")
-
-    user.password_hash = hash_password(new_password)
-    reset.used = True
-    await db.commit()
-
-    return {"message": "Password has been reset successfully"}
