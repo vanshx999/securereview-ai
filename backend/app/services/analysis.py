@@ -155,13 +155,14 @@ async def analyze_with_groq(prompt: str) -> Optional[str]:
     api_key = os.environ.get("GROQ_API_KEY") or settings.GROQ_API_KEY
     if not api_key:
         return None
+    model = os.environ.get("LLM_MODEL") or settings.LLM_MODEL
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json={
-                    "model": "llama-3.1-70b-versatile",
+                    "model": model,
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.1,
                     "max_tokens": 4096,

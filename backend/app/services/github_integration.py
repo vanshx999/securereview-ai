@@ -73,7 +73,17 @@ async def get_github_client_for_org(org_id: str, db: AsyncSession):
         )
     )
     integration = result.scalar_one_or_none()
-    if not integration or not integration.access_token:
+    if not integration:
+        return None
+    config = integration.config or {}
+    install_id = config.get("installation_id")
+    if install_id:
+        token = await get_installation_access_token(int(install_id))
+        if not token:
+            return None
+        from github import Github
+        return Github(token)
+    if not integration.access_token:
         return None
     from github import Github
     return Github(integration.access_token)

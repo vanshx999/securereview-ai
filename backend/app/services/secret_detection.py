@@ -215,13 +215,23 @@ async def scan_diff_for_patterns(
     findings = []
     lines = diff_data.split('\n')
     current_file = file_path or "unknown"
+    target_line_num = 0
 
     for line_idx, line in enumerate(lines):
         if line.startswith('+++ b/'):
             current_file = line[6:]
+            target_line_num = 0
+            continue
+
+        if line.startswith('@@'):
+            match = re.match(r'@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@', line)
+            if match:
+                target_line_num = int(match.group(1))
             continue
 
         if not (line.startswith('+') or line.startswith('-')):
+            if line.startswith(' '):
+                target_line_num += 1
             continue
 
         if is_false_positive(line):
@@ -229,6 +239,7 @@ async def scan_diff_for_patterns(
 
         code = line[1:].strip()
         if not code:
+            target_line_num += 1
             continue
 
         for category_name, patterns in ALL_CATEGORIES:
@@ -237,18 +248,20 @@ async def scan_diff_for_patterns(
                 for match in matches:
                     findings.append({
                         "file_path": current_file,
-                        "line_number": line_idx + 1,
-                        "line_start": line_idx + 1,
-                        "line_end": line_idx + 1,
+                        "line_number": target_line_num,
+                        "line_start": target_line_num,
+                        "line_end": target_line_num,
                         "severity": severity,
                         "category": category_name.lower(),
                         "title": title,
-                        "description": f"Potential {title.lower()} detected in {current_file} at line {line_idx + 1}",
+                        "description": f"Potential {title.lower()} detected in {current_file} at line {target_line_num}",
                         "code_snippet": code[:500],
                         "suggested_fix": generate_fix_suggestion(title, code),
                         "is_ai_generated": category_name == "AI_HALLUCINATION",
                         "cwe_id": _cwe_for_category(category_name),
                     })
+
+        target_line_num += 1
 
     return findings
 

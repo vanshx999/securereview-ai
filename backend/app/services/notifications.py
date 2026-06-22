@@ -123,7 +123,9 @@ async def notify_analysis_complete(
 
         elif channel == "discord" and config.get("webhook_url"):
             content = _format_findings_summary(findings, repo_name, pr_number, pr_title)
-            content = content.replace("*", "**").replace("<", "[").replace(">", "](")
+            if dashboard_url:
+                content += f"\n🔗 **View on Dashboard:** {dashboard_url}"
+            content = content.replace("*", "**")
             await send_discord_notification(config["webhook_url"], {
                 "content": content,
             })

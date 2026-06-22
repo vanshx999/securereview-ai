@@ -264,11 +264,14 @@ async def github_webhook(
 
                     if diff_data:
                         await db.commit()
-                        try:
-                            await analyze_pr(pr.id, diff_data)
-                        except Exception as exc:
-                            logger.exception("inline_analyze_failed: %s", exc)
-                            webhook_event.error = f"analyze_failed: {str(exc)[:200]}"
+
+                        async def _run_analysis():
+                            try:
+                                await analyze_pr(pr.id, diff_data)
+                            except Exception as exc:
+                                logger.exception("background_analyze_failed: %s", exc)
+
+                        asyncio.create_task(_run_analysis())
 
                     result_status = f"queued_pr_{pr_number}"
 
