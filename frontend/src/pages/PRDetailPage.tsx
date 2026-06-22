@@ -212,7 +212,7 @@ setFindings(findingsData.findings ?? findingsData);
                 {finding.status === 'open' && (
                   <>
                     <button onClick={() => handleFix(finding.id)} className="btn-secondary text-xs py-1.5">Mark Fixed</button>
-                    <button onClick={() => setDismissModal(finding.id)} className="btn-secondary text-xs py-1.5 text-gray-500">Dismiss</button>
+                    <button onClick={() => setDismissModal(finding.id)} className="btn-secondary text-xs py-1.5 text-yellow-400 hover:text-yellow-300">Dismiss</button>
                   </>
                 )}
                 <button onClick={() => setExpandedFinding(expandedFinding === finding.id ? null : finding.id)} className="text-gray-500 hover:text-gray-300">
